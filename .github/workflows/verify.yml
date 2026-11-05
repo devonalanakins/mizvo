@@ -16,6 +16,13 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Integration format diagnostic: remove immediately after exact source is committed.
+      - name: Capture exact Prettier browser output
+        run: |
+          npx prettier --write tests/browser.mjs
+          echo MIZVO_BROWSER_FORMAT_BEGIN
+          base64 -w 80 tests/browser.mjs
+          echo MIZVO_BROWSER_FORMAT_END
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
