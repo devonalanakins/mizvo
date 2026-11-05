@@ -18,6 +18,7 @@
     "lint": "prettier --check apps packages scripts tests package.json tsconfig.json .github",
     "format": "prettier --write apps packages scripts tests package.json tsconfig.json .github",
     "backup": "node scripts/backup.ts",
+    "recovery:drill": "node scripts/recovery-drill.ts",
     "verify:github": "node scripts/verify-github.ts",
     "test:distribution": "node scripts/verify-distribution.mjs",
     "verify:all": "node scripts/verify-all.mjs",
