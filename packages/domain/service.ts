@@ -213,10 +213,25 @@ export class Domain {
       client,
       options,
     );
-    const tasks = this.s.all(
-      `SELECT * FROM tasks WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at,id`,
-      project,
+    const activeMembers = new Map(
+      this.s
+        .all(
+          "SELECT m.user_id,u.name FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.project_id=? AND m.role IN ('owner','contributor') AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?)",
+          project,
+          now(),
+        )
+        .map((r) => [r.user_id, r.name]),
     );
+    const tasks: Row[] = this.s
+      .all(
+        `SELECT * FROM tasks WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at,id`,
+        project,
+      )
+      .map((t) => ({
+        ...t,
+        assignee_id: activeMembers.has(t.assignee_id) ? t.assignee_id : null,
+        assignee_name: activeMembers.get(t.assignee_id) ?? null,
+      }));
     const milestones = this.s.all(
       `SELECT * FROM project_milestones WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY target_date IS NULL,target_date,created_at,id`,
       project,
@@ -1027,6 +1042,14 @@ export class Domain {
           project,
           target,
         );
+      // A revoked or client-only identity must not retain an internal task assignment.
+      if (b.revoke === true || b.role === "client")
+        this.s.run(
+          "UPDATE tasks SET assignee_id=NULL,version=version+1,updated_at=? WHERE project_id=? AND assignee_id=?",
+          now(),
+          project,
+          target,
+        );
       this.audit(
         project,
         user,
@@ -1168,6 +1191,52 @@ export class Domain {
           )
         : undefined;
       if (taskId) assert(old, 404, "Task not found.");
+      const assignmentIsActive = (target: string) =>
+        !!this.s.get(
+          "SELECT 1 FROM memberships WHERE project_id=? AND user_id=? AND role IN ('owner','contributor') AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>?)",
+          project,
+          target,
+          now(),
+        );
+      const previousAssignee =
+        old?.assignee_id && assignmentIsActive(old.assignee_id)
+          ? old.assignee_id
+          : null;
+      const assigneeId =
+        b.assignee_id === undefined
+          ? previousAssignee
+          : b.assignee_id === "" || b.assignee_id === null
+            ? null
+            : text(b.assignee_id, "Assignee", 100);
+      const rawDue =
+        b.due_date === undefined ? (old?.due_date ?? null) : b.due_date;
+      const dueDate =
+        rawDue === "" || rawDue === null
+          ? null
+          : text(rawDue, "Due date", 10, 10);
+      if (dueDate) {
+        const stamp = Date.parse(`${dueDate}T00:00:00.000Z`);
+        assert(
+          /^\d{4}-\d{2}-\d{2}$/.test(dueDate) &&
+            Number.isFinite(stamp) &&
+            new Date(stamp).toISOString().slice(0, 10) === dueDate,
+          400,
+          "Enter a valid calendar due date.",
+        );
+      }
+      if (m.role !== "owner")
+        assert(
+          (b.assignee_id === undefined || assigneeId === previousAssignee) &&
+            dueDate === (old?.due_date ?? null),
+          403,
+          "Only the project owner can set task assignments and due dates.",
+        );
+      if (assigneeId)
+        assert(
+          assignmentIsActive(assigneeId),
+          400,
+          "Assign only an active project owner or contributor.",
+        );
       const milestoneId =
         b.milestone_id === undefined ? old?.milestone_id : b.milestone_id;
       const linked = milestoneId
@@ -1236,7 +1305,7 @@ export class Domain {
       const task = taskId ?? id();
       if (taskId) {
         const r = this.s.run(
-          "UPDATE tasks SET title=?,milestone=?,status=?,priority=?,evidence=?,review_required=?,reviewed_by=?,depends_on=?,visibility=?,milestone_id=?,version=version+1,updated_at=? WHERE id=? AND version=?",
+          "UPDATE tasks SET title=?,milestone=?,status=?,priority=?,evidence=?,review_required=?,reviewed_by=?,depends_on=?,visibility=?,milestone_id=?,assignee_id=?,due_date=?,version=version+1,updated_at=? WHERE id=? AND version=?",
           title,
           milestone,
           status,
@@ -1247,6 +1316,8 @@ export class Domain {
           dependency?.id ?? null,
           visibility,
           linked?.id ?? null,
+          assigneeId,
+          dueDate,
           now(),
           task,
           version(b.version),
@@ -1254,7 +1325,7 @@ export class Domain {
         assert(r.changes, 409, "Task changed. Reload before updating.");
       } else
         this.s.run(
-          "INSERT INTO tasks(id,project_id,title,milestone,status,priority,evidence,review_required,reviewed_by,depends_on,visibility,actor_id,version,created_at,updated_at,milestone_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)",
+          "INSERT INTO tasks(id,project_id,title,milestone,status,priority,evidence,review_required,reviewed_by,depends_on,visibility,actor_id,version,created_at,updated_at,milestone_id,assignee_id,due_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)",
           task,
           project,
           title,
@@ -1270,6 +1341,8 @@ export class Domain {
           now(),
           now(),
           linked?.id ?? null,
+          assigneeId,
+          dueDate,
         );
       this.audit(project, user, taskId ? "task.updated" : "task.created", task);
     });

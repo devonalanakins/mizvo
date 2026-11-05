@@ -3558,6 +3558,388 @@ test("a password changed during scrypt verification cannot mint a stale login se
   }
 });
 
+test("V0.17 delegated tasks enforce active membership, owner changes, date validity and client isolation", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const engineer = await f.login(f.users.contributor.email);
+    const client = await f.login(f.users.client.email);
+    const p = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Delegation",
+          purpose: "Deliver work through accountable people.",
+        },
+        founder,
+      )
+    ).value.id;
+    const path = "/projects/" + p;
+    for (const [user, session, role] of [
+      [f.users.contributor, engineer, "contributor"],
+      [f.users.client, client, "client"],
+    ] as const) {
+      const invitation = await f.request(
+        path + "/invitations",
+        "POST",
+        { email: user.email, role },
+        founder,
+      );
+      assert.equal(invitation.status, 201);
+      assert.equal(
+        (
+          await f.request(
+            "/invitations/accept",
+            "POST",
+            {
+              token: invitation.value.token,
+            },
+            session,
+          )
+        ).status,
+        200,
+      );
+    }
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks",
+          "POST",
+          {
+            title: "Assigned task",
+            assignee_id: f.users.contributor.id,
+            due_date: "2026-12-31",
+            visibility: "client",
+          },
+          founder,
+        )
+      ).status,
+      201,
+    );
+    let room = (await f.request(path, "GET", undefined, founder)).value;
+    let task = room.tasks.find((t: any) => t.title === "Assigned task");
+    assert.equal(task.assignee_id, f.users.contributor.id);
+    assert.equal(task.assignee_name, "Test Engineer");
+    assert.equal(task.due_date, "2026-12-31");
+    let projection = (
+      await f.request("/space/projects/" + p, "GET", undefined, client)
+    ).value;
+    assert.equal(projection.tasks.length, 1);
+    assert.equal(projection.tasks[0].title, "Assigned task");
+    assert.equal("assignee_id" in projection.tasks[0], false);
+    assert.equal("assignee_name" in projection.tasks[0], false);
+    assert.equal("due_date" in projection.tasks[0], false);
+    assert.equal(
+      JSON.stringify(projection).includes(f.users.contributor.id),
+      false,
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.owner.id,
+          },
+          engineer,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            due_date: "2027-01-01",
+          },
+          engineer,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            status: "doing",
+            assignee_id: undefined,
+            due_date: undefined,
+          },
+          engineer,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await f.request(path + "/tasks/" + task.id, "PATCH", task, founder))
+        .status,
+      409,
+      "Concurrent changes must reject an obsolete task version.",
+    );
+    task = (await f.request(path, "GET", undefined, founder)).value.tasks[0];
+    assert.equal(task.status, "doing");
+    for (const invalid of [
+      "2026-02-30",
+      "2026-13-01",
+      "12/31/2026",
+      "2026-01-01T00:00",
+    ]) {
+      assert.equal(
+        (
+          await f.request(
+            path + "/tasks/" + task.id,
+            "PATCH",
+            {
+              ...task,
+              due_date: invalid,
+            },
+            founder,
+          )
+        ).status,
+        400,
+      );
+    }
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.client.id,
+          },
+          founder,
+        )
+      ).status,
+      400,
+      "Client roles cannot receive internal assignments.",
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.other.id,
+          },
+          founder,
+        )
+      ).status,
+      400,
+      "Unrelated users cannot receive assignments.",
+    );
+    f.app.s.run(
+      "UPDATE memberships SET expires_at='2000-01-01' WHERE project_id=? AND user_id=?",
+      p,
+      f.users.contributor.id,
+    );
+    room = (await f.request(path, "GET", undefined, founder)).value;
+    task = room.tasks[0];
+    assert.equal(
+      task.assignee_id,
+      null,
+      "Expired access must hide an assignment.",
+    );
+    assert.equal(task.assignee_name, null);
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            priority: "high",
+          },
+          founder,
+        )
+      ).status,
+      200,
+      "The owner can clear obsolete assignments without losing the task.",
+    );
+    assert.equal(
+      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!
+        .assignee_id,
+      null,
+    );
+    f.app.s.run(
+      "UPDATE memberships SET expires_at=NULL WHERE project_id=? AND user_id=?",
+      p,
+      f.users.contributor.id,
+    );
+    task = (await f.request(path, "GET", undefined, founder)).value.tasks[0];
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.contributor.id,
+          },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/members/" + f.users.contributor.id,
+          "PATCH",
+          {
+            role: "client",
+          },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!
+        .assignee_id,
+      null,
+      "Downgrading a contributor to client must atomically unassign tasks.",
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/members/" + f.users.contributor.id,
+          "PATCH",
+          {
+            role: "contributor",
+          },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    task = (await f.request(path, "GET", undefined, founder)).value.tasks[0];
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.contributor.id,
+          },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/members/" + f.users.contributor.id,
+          "PATCH",
+          {
+            revoke: true,
+          },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!
+        .assignee_id,
+      null,
+      "Revoking project membership must atomically unassign tasks.",
+    );
+    task = (await f.request(path, "GET", undefined, founder)).value.tasks[0];
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.contributor.id,
+          },
+          founder,
+        )
+      ).status,
+      400,
+    );
+    projection = (
+      await f.request("/space/projects/" + p, "GET", undefined, client)
+    ).value;
+    assert.equal(projection.tasks[0].title, "Assigned task");
+  } finally {
+    await f.stop();
+  }
+});
+
+test("V0.17 migration preserves existing tasks and refuses older release schemas", async () => {
+  const { mkdirSync, copyFileSync, readdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "mizvo-task-upgrade-"));
+  const directory = join(root, "migrations");
+  const database = join(root, "database.sqlite");
+  mkdirSync(directory);
+  for (const name of readdirSync("packages/storage").filter((n) =>
+    /^00[1-9]-.+\.sql$/.test(n),
+  ))
+    copyFileSync("packages/storage/" + name, join(directory, name));
+  let store: Store | undefined;
+  try {
+    store = new Store(database, directory);
+    store.run("INSERT INTO organizations VALUES ('old','Legacy')");
+    const user = account(
+      store,
+      "Legacy Founder",
+      "legacy-delegation@example.test",
+      password,
+      "old",
+      "founder",
+    );
+    const { Domain } = await import("../packages/domain/service.ts");
+    const project = new Domain(store, "old").createProject(user.id, {
+      name: "Legacy delivery",
+      purpose: "Preserve old task identity.",
+    });
+    store.run(
+      "INSERT INTO tasks(id,project_id,title,milestone,status,priority,visibility,actor_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      "task-v0-16",
+      project.id,
+      "Keep original task",
+      "Plan",
+      "todo",
+      "normal",
+      "internal",
+      user.id,
+      "2026-01-01",
+      "2026-01-01",
+    );
+    const before = store.get("SELECT * FROM tasks WHERE id='task-v0-16'")!;
+    store.close();
+    store = undefined;
+    store = new Store(database);
+    const upgraded = store.get("SELECT * FROM tasks WHERE id='task-v0-16'")!;
+    assert.equal(upgraded.assignee_id, null);
+    assert.equal(upgraded.due_date, null);
+    const { assignee_id, due_date, ...preserved } = upgraded;
+    assert.deepEqual({ ...preserved }, { ...before });
+    assert.equal(store.get("PRAGMA integrity_check")!.integrity_check, "ok");
+    assert.deepEqual(store.all("PRAGMA foreign_key_check"), []);
+    store.close();
+    store = undefined;
+    assert.throws(() => new Store(database, directory), /does not support/);
+  } finally {
+    store?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("V0.15 review migration preserves original rows, defaults private, and refuses downgrade", async () => {
   const { mkdirSync, copyFileSync, readdirSync } = await import("node:fs");
   const root = mkdtempSync(join(tmpdir(), "mizvo-review-upgrade-"));
