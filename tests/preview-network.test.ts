@@ -97,6 +97,48 @@ test("preview refuses mixed DNS answers, family spoofing and empty or excessive 
   assert.equal(dialCount, 0);
 });
 
+test("DNS cancellation is bounded and never opens a socket after abort", async () => {
+  const cancelled = new AbortController();
+  cancelled.abort();
+  let resolutions = 0;
+  await assert.rejects(
+    () =>
+      resolvePublicPreview(
+        "preview.example.org",
+        async () => {
+          resolutions++;
+          return [{ address: "1.1.1.1", family: 4 }];
+        },
+        cancelled.signal,
+      ),
+    /cancelled/,
+  );
+  assert.equal(resolutions, 0);
+  const controller = new AbortController();
+  let dials = 0;
+  const fetcher = createGuardedPreviewFetch(
+    async () => new Promise<never>(() => {}),
+    async () => {
+      dials++;
+      return { status: 200, reported_commit: null };
+    },
+  );
+  const pending = fetcher(url, { ...requestInit, signal: controller.signal });
+  controller.abort();
+  await assert.rejects(() => pending, /cancelled/);
+  assert.equal(dials, 0);
+  const shortly = createGuardedPreviewFetch(
+    async () => new Promise<never>(() => {}),
+    async () => {
+      throw new Error("Never dial after DNS deadline");
+    },
+  );
+  await assert.rejects(
+    () => shortly(url, { ...requestInit, signal: AbortSignal.timeout(5) }),
+    /cancelled/,
+  );
+});
+
 test("preview pins the vetted IP and retains TLS hostname and certificate validation", async () => {
   let resolutions = 0;
   let dials = 0;

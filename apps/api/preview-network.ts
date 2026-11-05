@@ -69,8 +69,38 @@ const systemResolver: PreviewResolver = async (hostname) => {
 export async function resolvePublicPreview(
   hostname: string,
   resolver: PreviewResolver = systemResolver,
+  signal?: AbortSignal | null,
 ): Promise<PreviewAddress> {
-  const answers = await resolver(hostname);
+  // DNS lookup itself must not be permitted to hang the request indefinitely.
+  // Some DNS backends cannot cancel an in-flight lookup; late answers are ignored.
+  const answers = await new Promise<PreviewAddress[]>((resolve, reject) => {
+    const deadline = AbortSignal.timeout(5000);
+    let finished = false;
+    function done(error: unknown, values?: PreviewAddress[]) {
+      if (finished) return;
+      finished = true;
+      deadline.removeEventListener("abort", onTimeout);
+      signal?.removeEventListener("abort", onCancelled);
+      if (error !== null) reject(error);
+      else resolve(values!);
+    }
+    function onTimeout() {
+      done(new Error("Preview DNS resolution timed out."));
+    }
+    function onCancelled() {
+      done(new Error("Preview DNS resolution cancelled."));
+    }
+    deadline.addEventListener("abort", onTimeout, { once: true });
+    signal?.addEventListener("abort", onCancelled, { once: true });
+    if (signal?.aborted) {
+      onCancelled();
+      return;
+    }
+    void resolver(hostname).then(
+      (values) => done(null, values),
+      (error) => done(error),
+    );
+  });
   if (
     !Array.isArray(answers) ||
     answers.length < 1 ||
@@ -170,7 +200,7 @@ export function createGuardedPreviewFetch(
     )
       throw new Error("Preview transport requires an exact read-only public HTTPS request.");
 
-    const destination = await resolvePublicPreview(target.hostname, resolver);
+    const destination = await resolvePublicPreview(target.hostname, resolver, init.signal);
     const result = await dial(pinnedPreviewOptions(target, destination), init.signal);
     const headers = new Headers();
     if (result.reported_commit)
