@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { guardedPreviewFetch } from "./preview-network.ts";
 import type { PreviewObservation } from "../../packages/domain/preview-evidence.ts";
 import { assert, now } from "../../packages/authz/security.ts";
 
@@ -31,7 +32,10 @@ function safePreviewUrl(input: string): string {
 export class PreviewProbe {
   private readonly allowlist: ReadonlySet<string>;
   private readonly transport: typeof fetch;
-  constructor(urls: string[] = [], transport: typeof fetch = fetch) {
+  constructor(
+    urls: string[] = [],
+    transport: typeof fetch = guardedPreviewFetch,
+  ) {
     this.allowlist = new Set(urls.map((u) => safePreviewUrl(u)));
     this.transport = transport;
   }

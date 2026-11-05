@@ -301,6 +301,7 @@ function projectHeader() {
         ["decisions", "Decisions"],
         ["proof", "Proofline"],
         ["releases", "Reviews & files"],
+        ["ownership", "Ownership"],
         ["feedback", "Feedback"],
         ["support", "Support"],
       ]
@@ -313,6 +314,7 @@ function projectHeader() {
         ["design", "Design"],
         ["tests", "Tests"],
         ["releases", "Releases"],
+        ["ownership", "Handoff"],
         ["notes", "Notes"],
       ];
   return `<header class="project-head"><div class="breadcrumb"><a href="/${route.surface}/projects">Projects</a> / ${e(p.name)}</div><div class="project-title"><img class="project-thumb" src="/assets/architecture.svg" alt=""><div><h1>${e(p.name)}</h1><p>${e(p.purpose)}</p></div>${badge(p.status)}</div><nav class="tabs" aria-label="Project sections">${tabs.map(([key, label]) => `<a href="${projectPath(p.id, key)}" class="${route.tab === key ? "active" : ""}" ${route.tab === key ? 'aria-current="page"' : ""}>${label}</a>`).join("")}</nav></header>`;
@@ -471,11 +473,105 @@ function recordFilter() {
 function recordFeed(list: Data[], client = false, emptyHtml = "") {
   return `<div id="record-feed">${room!.record_page?.has_more ? button("Load older records", "older-records") : ""}<div id="record-timeline">${list.length ? list.map((r) => recordCard(r, client)).join("") : emptyHtml}</div></div>`;
 }
+const ownershipModelLabels: Record<string, string> = {
+  undecided: "Not selected",
+  client_owned_mizvo_operated: "Client-owned hosting, operated by Mizvo",
+  mizvo_hosted: "Mizvo-hosted service (future conditional offering)",
+  client_self_hosted: "Client-managed / self-hosted",
+};
+function ownershipPanel(client = false) {
+  const v = room!.ownership,
+    canEdit = !client && room!.role === "owner";
+  if (!v)
+    return `<section class="card" aria-label="Hosting and ownership plan"><p class="eyebrow">Ownership and handoff</p><h2>No hosting plan has been shared.</h2><p class="muted">A real deployment requires a separate agreement on who owns the domain, hosting account, costs, data, support and exit. No infrastructure is being provisioned here.</p>${canEdit ? button("Prepare an ownership plan", "edit-ownership", "") : ""}</section>`;
+  const details = [
+    ["Hosting model", ownershipModelLabels[v.hosting_model] ?? "Not selected"],
+    ["Planned domain", v.planned_domain || "Not specified"],
+    ["Hosting account owner", v.infrastructure_owner || "To be agreed"],
+    ["Provider billing owner", v.billing_owner || "To be agreed"],
+    ["Technical operator", v.operator || "To be agreed"],
+    ["Data export and handoff", v.export_plan || "Not specified"],
+    ["Support boundaries", v.support_scope || "Not specified"],
+  ];
+  const history =
+    !client && room!.ownership_revisions?.length > 1
+      ? `<details><summary>Prior ownership plan revisions</summary><div class="stack">${room!.ownership_revisions
+          .slice(1)
+          .map(
+            (r: Data) =>
+              `<p class="muted">Revision ${e(r.revision)} · ${e(r.visibility)} · ${date(r.created_at)} · ${e(ownershipModelLabels[r.hosting_model] ?? "Not selected")}</p>`,
+          )
+          .join("")}</div></details>`
+      : "";
+  return `<section class="card" aria-label="Hosting and ownership plan"><div class="row between"><div><p class="eyebrow">Ownership and handoff · Revision ${e(v.revision)}</p><h2>Who controls what?</h2></div>${canEdit ? button("Revise ownership plan", "edit-ownership", "") : ""}</div><p class="notice">Proposal only · No account, domain, payment, backup, export, operational access or deployment has been verified by this record.</p>${!client ? `<p class="muted">${v.visibility === "client" ? "Shared with project clients." : "Internal draft; clients see the latest shared revision, if any."}</p>` : ""}<dl class="detail-list">${details.map(([label, value]) => `<dt>${e(label)}</dt><dd>${e(value)}</dd>`).join("")}</dl><small class="muted">Recorded ${date(v.created_at)} · Actual hosting and support terms require independent authorization.</small>${history}</section>`;
+}
+function ownershipForm() {
+  const v = room!.ownership;
+  const options = Object.entries(ownershipModelLabels)
+    .map(
+      ([key, label]) =>
+        `<option value="${e(key)}" ${(v?.hosting_model ?? "undecided") === key ? "selected" : ""}>${e(label)}</option>`,
+    )
+    .join("");
+  return form(
+    "ownership-plan",
+    `<label class="field">Proposed hosting arrangement<select name="hosting_model" required>${options}</select></label>` +
+      field(
+        "Planned domain (optional)",
+        "planned_domain",
+        v?.planned_domain ?? "",
+        "text",
+        false,
+      ) +
+      field(
+        "Hosting account owner (optional)",
+        "infrastructure_owner",
+        v?.infrastructure_owner ?? "",
+        "text",
+        false,
+      ) +
+      field(
+        "Provider billing owner (optional)",
+        "billing_owner",
+        v?.billing_owner ?? "",
+        "text",
+        false,
+      ) +
+      field(
+        "Technical operator (optional)",
+        "operator",
+        v?.operator ?? "",
+        "text",
+        false,
+      ) +
+      textarea(
+        "Data export and handoff plan (optional)",
+        "export_plan",
+        v?.export_plan ?? "",
+        false,
+      ) +
+      textarea(
+        "Support boundary (optional)",
+        "support_scope",
+        v?.support_scope ?? "",
+        false,
+      ) +
+      select(
+        "Share this plan with the client",
+        "visibility",
+        ["internal", "client"],
+        v?.visibility ?? "internal",
+      ) +
+      `<input type="hidden" name="base_revision" value="${e(v?.revision ?? 0)}"><p class="notice">Planning record only. Do not enter credentials, payment details or private account identifiers. Saving does not create resources, sign a contract, verify backups or establish an SLA.</p>`,
+    "Save ownership plan",
+  );
+}
 function projectView() {
   const client = route.surface === "space",
     tab = route.tab;
   let main = "";
-  if (tab === "plan") main = tasks();
+  if (tab === "ownership") main = ownershipPanel(client);
+  else if (tab === "plan") main = tasks();
   else if (tab === "decisions") main = clientDecisionView();
   else if (tab === "proof") main = proofSummary(client) + releases();
   else if (tab === "releases") main = releases();
@@ -987,6 +1083,9 @@ async function action(value: string) {
     case "new-brief":
       modal("Create a Living Brief revision", livingBriefForm());
       break;
+    case "edit-ownership":
+      modal("Prepare hosting and handoff terms", ownershipForm());
+      break;
     case "new-client-decision":
       modal("Request a client decision", clientDecisionForm());
       break;
@@ -1370,6 +1469,9 @@ async function submit(f: HTMLFormElement) {
       break;
     case "brief-revision":
       await api(`/projects/${route.project}/brief-revisions`, "POST", data);
+      break;
+    case "ownership-plan":
+      await api(`/projects/${route.project}/ownership-plan`, "POST", data);
       break;
     case "client-decision":
       await api(`/projects/${route.project}/client-decisions`, "POST", data);

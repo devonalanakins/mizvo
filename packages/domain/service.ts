@@ -228,6 +228,15 @@ export class Domain {
     const shared_brief =
       brief_revisions.find((r) => r.visibility === "client") ?? null;
     const brief = client ? shared_brief : (brief_revisions[0] ?? null);
+    const ownership_revisions = this.s.all(
+      "SELECT * FROM project_ownership_revisions WHERE project_id=? ORDER BY revision DESC",
+      project,
+    );
+    const shared_ownership =
+      ownership_revisions.find((r) => r.visibility === "client") ?? null;
+    const ownership = client
+      ? shared_ownership
+      : (ownership_revisions[0] ?? null);
     const client_decisions = this.clientDecisions(user, project, client);
     const next_client_decision =
       client_decisions.find((r) => r.status === "pending" && r.current) ?? null;
@@ -318,6 +327,20 @@ export class Domain {
           : null,
         client_decisions,
         next_client_decision,
+        ownership: ownership
+          ? {
+              revision: ownership.revision,
+              hosting_model: ownership.hosting_model,
+              planned_domain: ownership.planned_domain,
+              infrastructure_owner: ownership.infrastructure_owner,
+              billing_owner: ownership.billing_owner,
+              operator: ownership.operator,
+              export_plan: ownership.export_plan,
+              support_scope: ownership.support_scope,
+              created_at: ownership.created_at,
+              verification_status: "not_verified",
+            }
+          : null,
         releases: releases.map(
           ({
             id,
@@ -359,6 +382,8 @@ export class Domain {
       brief,
       shared_brief,
       brief_revisions,
+      ownership,
+      ownership_revisions,
       client_decisions,
       next_client_decision,
       releases,
@@ -376,6 +401,81 @@ export class Domain {
           project,
         ) ?? null,
     };
+  }
+  ownershipRevision(user: string, project: string, b: Row) {
+    const access = owner(this.s, project, user);
+    assert(
+      access.organization_id === this.organization,
+      404,
+      "Project not found.",
+    );
+    const hostingModel = choice(
+        b.hosting_model,
+        [
+          "undecided",
+          "client_owned_mizvo_operated",
+          "mizvo_hosted",
+          "client_self_hosted",
+        ],
+        "hosting arrangement",
+      ),
+      plannedDomain = text(b.planned_domain ?? "", "Planned domain", 255, 0),
+      infrastructureOwner = text(
+        b.infrastructure_owner ?? "",
+        "Infrastructure owner",
+        180,
+        0,
+      ),
+      billingOwner = text(b.billing_owner ?? "", "Billing owner", 180, 0),
+      operator = text(b.operator ?? "", "Technical operator", 180, 0),
+      exportPlan = text(b.export_plan ?? "", "Data export plan", 2000, 0),
+      supportScope = text(b.support_scope ?? "", "Support scope", 2000, 0),
+      visibility = choice(
+        b.visibility ?? "internal",
+        ["internal", "client"],
+        "visibility",
+      ),
+      base = Number(b.base_revision);
+    assert(
+      Number.isSafeInteger(base) && base >= 0 && base <= 100000,
+      400,
+      "An exact current ownership plan revision is required.",
+    );
+    return this.s.transaction(() => {
+      const latest = this.s.get(
+        "SELECT COALESCE(MAX(revision),0) AS revision FROM project_ownership_revisions WHERE project_id=?",
+        project,
+      )!.revision;
+      assert(
+        latest === base,
+        409,
+        "Ownership plan changed. Reload before saving another revision.",
+      );
+      const key = id(),
+        stamp = now();
+      this.s.run(
+        "INSERT INTO project_ownership_revisions(id,project_id,revision,hosting_model,planned_domain,infrastructure_owner,billing_owner,operator,export_plan,support_scope,visibility,actor_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        key,
+        project,
+        latest + 1,
+        hostingModel,
+        plannedDomain,
+        infrastructureOwner,
+        billingOwner,
+        operator,
+        exportPlan,
+        supportScope,
+        visibility,
+        user,
+        stamp,
+      );
+      this.audit(project, user, "ownership.plan_revised", key);
+      return {
+        id: key,
+        revision: latest + 1,
+        verification_status: "not_verified",
+      };
+    });
   }
   briefRevision(user: string, project: string, b: Row) {
     const access = owner(this.s, project, user);

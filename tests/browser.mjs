@@ -153,6 +153,35 @@ try {
     .getByRole("heading", { name: "Mizvo verification project" })
     .waitFor();
   const project = page.url().match(/projects\/([^?]+)/)[1];
+  await page.getByRole("link", { name: "Handoff", exact: true }).click();
+  await page.getByRole("button", { name: "Prepare an ownership plan" }).click();
+  await page
+    .getByLabel("Proposed hosting arrangement")
+    .selectOption("client_owned_mizvo_operated");
+  await page.getByLabel("Planned domain (optional)").fill("demo.example.test");
+  await page
+    .getByLabel("Hosting account owner (optional)")
+    .fill("Example Organization");
+  await page
+    .getByLabel("Provider billing owner (optional)")
+    .fill("Example Organization");
+  await page
+    .getByLabel("Technical operator (optional)")
+    .fill("Mizvo (proposed)");
+  await page
+    .getByLabel("Data export and handoff plan (optional)")
+    .fill('Portable export. <img src=x onerror="window.xss=true">');
+  await page
+    .getByLabel("Support boundary (optional)")
+    .fill("Business hours only under a separately approved agreement.");
+  await page
+    .getByLabel("Share this plan with the client")
+    .selectOption("client");
+  await page.getByRole("button", { name: "Save ownership plan" }).click();
+  await page.getByRole("heading", { name: "Who controls what?" }).waitFor();
+  await capture(page, "studio-ownership-plan", 1440);
+  await page.getByRole("link", { name: "Room", exact: true }).click();
+
   await page.locator("#record-kind").selectOption("note");
   await page.locator("#record-title").fill("Architecture context");
   await page
@@ -331,6 +360,25 @@ try {
   await client
     .getByRole("heading", { name: "A shared project update" })
     .waitFor();
+  await client.getByRole("link", { name: "Ownership", exact: true }).click();
+  await client.getByRole("heading", { name: "Who controls what?" }).waitFor();
+  await client.getByText("Client-owned hosting, operated by Mizvo").waitFor();
+  await client
+    .getByText(
+      "No account, domain, payment, backup, export, operational access or deployment has been verified",
+      { exact: false },
+    )
+    .waitFor();
+  assert.equal(
+    await client
+      .locator('section[aria-label="Hosting and ownership plan"] img')
+      .count(),
+    0,
+  );
+  assert.equal(await client.evaluate(() => window.xss), undefined);
+  await capture(client, "client-ownership-plan", 390);
+  await client.getByRole("link", { name: "Overview", exact: true }).click();
+
   for (const w of [320, 390, 768, 1024, 1440, 1920])
     await capture(client, "client-space", w);
   await client.getByRole("link", { name: "Feedback", exact: true }).click();
@@ -670,6 +718,7 @@ try {
           "client isolation",
           "feedback",
           "version-specific client approval",
+          "customer-owned hosting planning and client-safe handoff visibility",
           "revocation with active session",
           "command keyboard focus",
           "offline feedback",
