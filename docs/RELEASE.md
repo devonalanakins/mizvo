@@ -26,7 +26,7 @@ MIZVO_DATABASE=/var/lib/mizvo/mizvo.sqlite \
 node dist/scripts/backup.js /approved-backups/mizvo-before-upgrade.sqlite
 ```
 
-The destination must not already exist. The helper uses the online backup API and integrity-checks the snapshot. Copy the verified snapshot to an approved encrypted independent location and record retention. No off-host backup job or external storage has been activated.
+The destination must not already exist, including an existing dangling symlink. The online backup helper creates and verifies the SQLite snapshot inside an owner-only (0700) temporary directory beside the destination, detaches WAL, integrity-checks it, sets its permissions to 0600, and then uses an exclusive same-filesystem hard link to publish the verified file without overwriting any existing path. On failure it removes temporary snapshot bytes and does not publish a partial destination. The operator must use a trusted local filesystem supporting atomic hard links, with a private/encrypted parent location and appropriate ACLs; this does not substitute for an off-host encrypted, tested backup and retention process. No off-host backup job or external storage has been activated.
 
 ## Isolated offline recovery rehearsal
 
