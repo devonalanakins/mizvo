@@ -4,10 +4,21 @@ import assert from "node:assert/strict";
 import { randomBytes, createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { request as httpRequest } from "node:http";
-import { createServer as httpsServer, request as httpsRequest } from "node:https";
+import {
+  createServer as httpsServer,
+  request as httpsRequest,
+} from "node:https";
 import { createServer as netServer } from "node:net";
 import { once } from "node:events";
-import { cp, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 
@@ -43,7 +54,10 @@ function subprocess(args, cwd, env, label) {
 async function waitForUpstream(port, child) {
   const start = Date.now();
   while (Date.now() - start < 12000) {
-    assert(child.exitCode === null && child.signalCode === null, "Staging app quit before readiness");
+    assert(
+      child.exitCode === null && child.signalCode === null,
+      "Staging app quit before readiness",
+    );
     try {
       const r = await fetch("http://127.0.0.1:" + port + "/api/health", {
         signal: AbortSignal.timeout(800),
@@ -66,7 +80,9 @@ async function stopChild(child) {
     }, 5000);
     child.once("exit", (code) => {
       clearTimeout(timeout);
-      code === 0 ? done() : reject(new Error("Staging app exited unsuccessfully"));
+      code === 0
+        ? done()
+        : reject(new Error("Staging app exited unsuccessfully"));
     });
     child.once("error", (error) => {
       clearTimeout(timeout);
@@ -198,6 +214,10 @@ async function secureRequest(port, trustedCert, path, options = {}) {
       },
       (response) => {
         const chunks = [];
+        // Node may detach response.socket before the stream's "end" callback.
+        // Capture the verified transport identity while the socket is present.
+        const tls = response.socket?.getProtocol() ?? null;
+        const authorized = response.socket?.authorized === true;
         response.on("data", (chunk) => chunks.push(chunk));
         response.on("end", () => {
           const raw = Buffer.concat(chunks).toString("utf8");
@@ -212,21 +232,27 @@ async function secureRequest(port, trustedCert, path, options = {}) {
             headers: response.headers,
             value,
             text: raw,
-            tls: response.socket.getProtocol(),
-            authorized: response.socket.authorized,
+            tls,
+            authorized,
           });
         });
       },
     );
     request.on("error", reject);
-    request.on("timeout", () => request.destroy(new Error("HTTPS request timed out")));
+    request.on("timeout", () =>
+      request.destroy(new Error("HTTPS request timed out")),
+    );
     if (body !== null) request.write(body);
     request.end();
   });
 }
 
 async function main() {
-  assert.equal(process.argv.length, 2, "Synthetic TLS rehearsal takes no real client paths");
+  assert.equal(
+    process.argv.length,
+    2,
+    "Synthetic TLS rehearsal takes no real client paths",
+  );
   const root = await mkdtemp(join(tmpdir(), "mizvo-tls-stage-"));
   const release = join(root, "release");
   const database = join(root, "persistent", "mizvo.sqlite");
@@ -292,9 +318,15 @@ async function main() {
     assert.equal(health.status, 200);
     assert.equal(health.authorized, true);
     assert.match(health.tls, /^TLSv1\.[23]$/);
-    assert.equal(health.headers["strict-transport-security"], "max-age=31536000");
+    assert.equal(
+      health.headers["strict-transport-security"],
+      "max-age=31536000",
+    );
     assert.equal(health.headers["x-frame-options"], "DENY");
-    assert.match(health.headers["content-security-policy"], /default-src 'self'/);
+    assert.match(
+      health.headers["content-security-policy"],
+      /default-src 'self'/,
+    );
     assert.equal(health.value.storage, "sqlite");
     const html = await secureRequest(tlsPort, identity.cert, "/");
     assert.equal(html.status, 200);
@@ -323,7 +355,10 @@ async function main() {
       origin,
       cookie: owner.cookie,
       csrf: owner.csrf,
-      body: { name: ROOT_LABEL, purpose: "Verify real HTTPS application controls." },
+      body: {
+        name: ROOT_LABEL,
+        purpose: "Verify real HTTPS application controls.",
+      },
     });
     assert.equal(valid.status, 201);
     const project = valid.value.id;
@@ -334,28 +369,43 @@ async function main() {
       { cookie: client.cookie },
     );
     assert.equal(unauthorized.status, 404);
-    const missingCsrf = await secureRequest(tlsPort, identity.cert, "/api/projects", {
-      method: "POST",
-      origin,
-      cookie: owner.cookie,
-      body: { name: "No CSRF", purpose: "Must not be created." },
-    });
+    const missingCsrf = await secureRequest(
+      tlsPort,
+      identity.cert,
+      "/api/projects",
+      {
+        method: "POST",
+        origin,
+        cookie: owner.cookie,
+        body: { name: "No CSRF", purpose: "Must not be created." },
+      },
+    );
     assert.equal(missingCsrf.status, 403);
-    const wrongOrigin = await secureRequest(tlsPort, identity.cert, "/api/projects", {
-      method: "POST",
-      origin: "https://unexpected.example.test",
-      cookie: owner.cookie,
-      csrf: owner.csrf,
-      body: { name: "Wrong origin", purpose: "Must not be created." },
-    });
+    const wrongOrigin = await secureRequest(
+      tlsPort,
+      identity.cert,
+      "/api/projects",
+      {
+        method: "POST",
+        origin: "https://unexpected.example.test",
+        cookie: owner.cookie,
+        csrf: owner.csrf,
+        body: { name: "Wrong origin", purpose: "Must not be created." },
+      },
+    );
     assert.equal(wrongOrigin.status, 403);
-    const oversized = await secureRequest(tlsPort, identity.cert, "/api/projects", {
-      method: "POST",
-      origin,
-      cookie: owner.cookie,
-      csrf: owner.csrf,
-      body: { name: "Too large", purpose: "X".repeat(35000) },
-    });
+    const oversized = await secureRequest(
+      tlsPort,
+      identity.cert,
+      "/api/projects",
+      {
+        method: "POST",
+        origin,
+        cookie: owner.cookie,
+        csrf: owner.csrf,
+        body: { name: "Too large", purpose: "X".repeat(35000) },
+      },
+    );
     assert.equal(oversized.status, 413);
 
     const invite = await secureRequest(
@@ -371,13 +421,18 @@ async function main() {
       },
     );
     assert.equal(invite.status, 201);
-    const accepted = await secureRequest(tlsPort, identity.cert, "/api/invitations/accept", {
-      method: "POST",
-      origin,
-      cookie: client.cookie,
-      csrf: client.csrf,
-      body: { token: invite.value.token },
-    });
+    const accepted = await secureRequest(
+      tlsPort,
+      identity.cert,
+      "/api/invitations/accept",
+      {
+        method: "POST",
+        origin,
+        cookie: client.cookie,
+        csrf: client.csrf,
+        body: { token: invite.value.token },
+      },
+    );
     assert.equal(accepted.status, 200);
     const clientRoom = await secureRequest(
       tlsPort,
@@ -386,9 +441,14 @@ async function main() {
       { cookie: client.cookie },
     );
     assert.equal(clientRoom.status, 200);
-    const clientInternal = await secureRequest(tlsPort, identity.cert, "/api/projects/" + project, {
-      cookie: client.cookie,
-    });
+    const clientInternal = await secureRequest(
+      tlsPort,
+      identity.cert,
+      "/api/projects/" + project,
+      {
+        cookie: client.cookie,
+      },
+    );
     assert.equal(clientInternal.status, 404);
 
     await mkdir(resolve("docs/evidence"), { recursive: true });
@@ -398,7 +458,8 @@ async function main() {
         {
           schema: "mizvo.tls-staging-rehearsal.v1",
           observed_at: new Date().toISOString(),
-          scope: "Ephemeral localhost HTTPS and copied production-mode Node build only.",
+          scope:
+            "Ephemeral localhost HTTPS and copied production-mode Node build only.",
           node_runtime: process.version,
           application_sha256: artifact,
           tls_protocol: health.tls,
@@ -424,7 +485,9 @@ async function main() {
         2,
       ) + "\n",
     );
-    console.log("PASS: real localhost HTTPS, production cookie/security controls, client authorization.");
+    console.log(
+      "PASS: real localhost HTTPS, production cookie/security controls, client authorization.",
+    );
   } finally {
     if (proxy) {
       proxy.closeAllConnections();
