@@ -231,8 +231,11 @@ export class Domain {
       "SELECT * FROM project_ownership_revisions WHERE project_id=? ORDER BY revision DESC",
       project,
     );
-    const shared_ownership = ownership_revisions.find((r) => r.visibility === "client") ?? null;
-    const ownership = client ? shared_ownership : (ownership_revisions[0] ?? null);
+    const shared_ownership =
+      ownership_revisions.find((r) => r.visibility === "client") ?? null;
+    const ownership = client
+      ? shared_ownership
+      : (ownership_revisions[0] ?? null);
     const client_decisions = this.clientDecisions(user, project, client);
     const next_client_decision =
       client_decisions.find((r) => r.status === "pending" && r.current) ?? null;
@@ -383,19 +386,37 @@ export class Domain {
   }
   ownershipRevision(user: string, project: string, b: Row) {
     const access = owner(this.s, project, user);
-    assert(access.organization_id === this.organization, 404, "Project not found.");
+    assert(
+      access.organization_id === this.organization,
+      404,
+      "Project not found.",
+    );
     const hostingModel = choice(
         b.hosting_model,
-        ["undecided", "client_owned_mizvo_operated", "mizvo_hosted", "client_self_hosted"],
+        [
+          "undecided",
+          "client_owned_mizvo_operated",
+          "mizvo_hosted",
+          "client_self_hosted",
+        ],
         "hosting arrangement",
       ),
       plannedDomain = text(b.planned_domain ?? "", "Planned domain", 255, 0),
-      infrastructureOwner = text(b.infrastructure_owner ?? "", "Infrastructure owner", 180, 0),
+      infrastructureOwner = text(
+        b.infrastructure_owner ?? "",
+        "Infrastructure owner",
+        180,
+        0,
+      ),
       billingOwner = text(b.billing_owner ?? "", "Billing owner", 180, 0),
       operator = text(b.operator ?? "", "Technical operator", 180, 0),
       exportPlan = text(b.export_plan ?? "", "Data export plan", 2000, 0),
       supportScope = text(b.support_scope ?? "", "Support scope", 2000, 0),
-      visibility = choice(b.visibility ?? "internal", ["internal", "client"], "visibility"),
+      visibility = choice(
+        b.visibility ?? "internal",
+        ["internal", "client"],
+        "visibility",
+      ),
       base = Number(b.base_revision);
     assert(
       Number.isSafeInteger(base) && base >= 0 && base <= 100000,
@@ -431,7 +452,11 @@ export class Domain {
         stamp,
       );
       this.audit(project, user, "ownership.plan_revised", key);
-      return { id: key, revision: latest + 1, verification_status: "not_verified" };
+      return {
+        id: key,
+        revision: latest + 1,
+        verification_status: "not_verified",
+      };
     });
   }
   briefRevision(user: string, project: string, b: Row) {
