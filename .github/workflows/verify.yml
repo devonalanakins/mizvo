@@ -16,6 +16,8 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - run: npm run format
+      - run: git diff --color=never -- scripts/installation-preflight.mjs scripts/installation-rehearsal.mjs tests/installation-preflight.test.mjs package.json
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
@@ -23,6 +25,7 @@ jobs:
       - run: npm run test:distribution
       - run: npm run artifact:create
       - run: npm run artifact:verify
+      - run: npm run test:installation
       - run: npm run test:staging
       - run: npm run test:tls
       - run: npm run test:container

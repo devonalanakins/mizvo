@@ -14,6 +14,8 @@ The Workbench reads allowlisted GitHub repositories. It never executes code or w
 
 Compiled candidate files can be checked against an [artifact integrity manifest](docs/ARTIFACT-INTEGRITY.md). This is a checksum receipt tied to the CI checkout, **not** a signed supply-chain attestation or a production release.
 
+An [installation preflight](docs/INSTALLATION-PREFLIGHT.md) checks copied compiled files against an independently supplied manifest digest, repository, Git checkout commit and source tree. CI also runs a synthetic tampering test. This verifies disk bytes at a point in time; it does not sign a build or establish what is running remotely.
+
 A [preview reachability check](docs/PREVIEW-PROOF.md) uses an installation-administrator-configured exact HTTPS URL allowlist and records a bounded, no-credentials HEAD observation for an immutable release. A reachable page or untrusted response header is **not** a verified staging or production deployment. The client-facing Proofline reports these distinctions in plain language.
 
 ## Run the actual application
