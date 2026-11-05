@@ -34,6 +34,9 @@ test("HTTP JSON ingestion enforces raw byte limits and strict UTF-8 without data
     padding: "",
   };
   async function post(parts: Buffer[], options: Record<string, string> = {}) {
+    // Keep parser edge cases independent of the separately tested public
+    // inquiry rate limit; this is an isolated synthetic database only.
+    app.s.run("DELETE FROM rate_limits WHERE key LIKE 'inquiry:%'");
     return await new Promise<{ status: number; body: any }>(
       (resolve, reject) => {
         const req = httpRequest(
