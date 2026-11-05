@@ -3,7 +3,9 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
+const engine = process.env.MIZVO_BROWSER ?? "chromium";
+assert(["chromium", "webkit"].includes(engine), "Unsupported browser engine.");
 import AxeBuilder from "@axe-core/playwright";
 import { application } from "../apps/api/server.ts";
 import { account } from "../packages/authz/security.ts";
@@ -37,9 +39,9 @@ account(app.s, "Test Client", "client@example.test", password, null);
 app.server.listen(0, "127.0.0.1");
 await once(app.server, "listening");
 config.origin = "http://localhost:" + app.server.address().port;
-const browser = await chromium.launch({
+const browser = await (engine === "webkit" ? webkit : chromium).launch({
   headless: true,
-  args: ["--no-sandbox"],
+  ...(engine === "chromium" ? { args: ["--no-sandbox"] } : {}),
 });
 const ownerContext = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -88,7 +90,7 @@ async function capture(p, name, width) {
   await p.evaluate(() => document.fonts.ready);
   await p.locator("#notice:empty").waitFor({ state: "attached" });
   await p.screenshot({
-    path: `docs/evidence/${name}-${width}.png`,
+    path: `docs/evidence/${engine}-${name}-${width}.png`,
     fullPage: true,
   });
   const overflow = await p.evaluate(
@@ -133,18 +135,21 @@ try {
     .waitFor();
   await signIn(page, founder.email);
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("link", { name: "Pipeline", exact: true }).click();
   await page
-    .getByRole("button", { name: "Create project", exact: true })
+    .getByRole("heading", {
+      name: "Keep our work understandable and connected.",
+      exact: true,
+    })
+    .waitFor();
+  await page.getByLabel("Stage").selectOption("approved");
+  await page.getByRole("button", { name: "Update stage", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create project from inquiry", exact: true })
     .click();
   await page
     .getByLabel("Project name", { exact: true })
     .fill("Mizvo verification project");
-  await page
-    .getByLabel("What should this project make possible?")
-    .fill("A durable, understandable home for engineering decisions.");
-  await page
-    .getByLabel("Scope and boundaries (optional)")
-    .fill("Synthetic browser verification; no client data.");
   await page
     .locator("dialog")
     .getByRole("button", { name: "Create project", exact: true })
@@ -337,6 +342,40 @@ try {
     demo_url: "https://preview.example.org/check",
   });
   assert.equal(rel.status, 201);
+  await engineer.goto(config.origin + `/studio/projects/${project}?tab=plan`);
+  await engineer.getByRole("button", { name: "Update", exact: true }).click();
+  await engineer.getByLabel("Status").selectOption("review");
+  await engineer
+    .getByLabel("Completion evidence")
+    .fill("PRIVATE_ENGINEERING_EVIDENCE: synthetic command output checked.");
+  await engineer
+    .getByRole("button", { name: "Save task", exact: true })
+    .click();
+  await engineer
+    .getByText(
+      "PRIVATE_ENGINEERING_EVIDENCE: synthetic command output checked.",
+      { exact: true },
+    )
+    .waitFor();
+  await engineer.goto(
+    config.origin + `/studio/projects/${project}?tab=releases`,
+  );
+  await engineer
+    .getByRole("button", { name: "Review this version", exact: true })
+    .click();
+  await engineer.getByLabel("Your outcome").selectOption("approved");
+  await engineer
+    .getByLabel("What did you review?")
+    .fill("PRIVATE_ENGINEERING_REVIEW: synthetic exact-version inspection.");
+  await engineer
+    .getByRole("button", { name: "Record review", exact: true })
+    .click();
+  await engineer
+    .getByText(
+      "PRIVATE_ENGINEERING_REVIEW: synthetic exact-version inspection.",
+      { exact: true },
+    )
+    .waitFor();
   const clientContext = await browser.newContext(),
     client = await clientContext.newPage();
   observe(client);
@@ -391,6 +430,21 @@ try {
   await client
     .getByRole("link", { name: "Reviews & files", exact: true })
     .click();
+  assert.equal(
+    await client
+      .getByText(
+        "PRIVATE_ENGINEERING_REVIEW: synthetic exact-version inspection.",
+        { exact: true },
+      )
+      .count(),
+    0,
+  );
+  const clientProjection = await api(client, `/space/projects/${project}`);
+  assert.equal(clientProjection.status, 200);
+  assert.equal(
+    JSON.stringify(clientProjection.body).includes("PRIVATE_ENGINEERING_"),
+    false,
+  );
   await client.getByRole("button", { name: "Review this version" }).click();
   await client.getByLabel("Your outcome").selectOption("approved");
   await client
@@ -402,6 +456,10 @@ try {
   await page
     .getByRole("heading", { name: "Verify persistent project context" })
     .waitFor();
+  await page.getByRole("button", { name: "Update", exact: true }).click();
+  await page.getByLabel("Status").selectOption("done");
+  await page.getByRole("button", { name: "Save task", exact: true }).click();
+  await page.locator(".task .tag.done").waitFor();
   await capture(page, "plan", 1440);
   await page.getByRole("button", { name: "Add milestone" }).click();
   await page.getByLabel("Milestone title").fill("Founder milestone checkpoint");
@@ -697,7 +755,7 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(csp, []);
   await writeFile(
-    "docs/evidence/browser-results.json",
+    `docs/evidence/browser-results-${engine}.json`,
     JSON.stringify(
       {
         observed_at: new Date().toISOString(),
@@ -709,7 +767,9 @@ try {
         flows: [
           "public inquiry",
           "founder authentication",
-          "project creation",
+          "inquiry approval and atomic project conversion",
+          "engineer task evidence and founder completion review",
+          "internal release review hidden from clients",
           "note editing and reload",
           "proposed decisions",
           "task creation",
@@ -741,8 +801,11 @@ try {
   );
 } catch (error) {
   await mkdir("test-results", { recursive: true });
-  await page.screenshot({ path: "test-results/failure.png", fullPage: true });
-  await writeFile("test-results/failure.html", await page.content());
+  await page.screenshot({
+    path: `test-results/failure-${engine}.png`,
+    fullPage: true,
+  });
+  await writeFile(`test-results/failure-${engine}.html`, await page.content());
   throw error;
 } finally {
   await browser.close();

@@ -122,7 +122,7 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
     assert.equal(receipt.row_counts_before_session_invalidation.records, 1);
     assert.equal(receipt.isolated_restore_sessions_invalidated, true);
     assert.equal(receipt.source_snapshot_unchanged, true);
-    assert.equal(receipt.schema_migrations.at(-1), 8);
+    assert.equal(receipt.schema_migrations.at(-1), 9);
     assert(!JSON.stringify(receipt).includes("PRIVATE_RECOVERY_CONTEXT"));
     assert(!JSON.stringify(receipt).includes("private@example.test"));
     assert(!JSON.stringify(receipt).includes("test-only-cookie"));

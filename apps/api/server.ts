@@ -171,7 +171,7 @@ export function application(
       if (path === "/api/health" && method === "GET") {
         send(res, 200, {
           status: "ok",
-          version: "0.5.0",
+          version: "0.16.0",
           storage: "sqlite",
           release: "local-review",
         });
@@ -197,7 +197,14 @@ export function application(
         rate(s, `login:${digest(address)}`, 10, 900000);
         const u = s.get("SELECT * FROM users WHERE email=?", address);
         const valid = await verifyPassword(password, u?.password_hash ?? dummy);
-        assert(u && valid, 401, "Email or password is incorrect.");
+        assert(
+          u &&
+            valid &&
+            s.get("SELECT password_hash FROM users WHERE id=?", u.id)
+              ?.password_hash === u.password_hash,
+          401,
+          "Email or password is incorrect.",
+        );
         const raw = token(),
           csrf = token(),
           expires = new Date(Date.now() + 8 * 3600000).toISOString();
@@ -253,6 +260,26 @@ export function application(
       }
       assert(session, 401, "Sign in to continue.");
       const user = session.user_id as string;
+      // Authorization at request start is insufficient after an asynchronous wait.
+      const checkSession = () =>
+        assert(
+          s.get(
+            "SELECT 1 FROM sessions WHERE hash=? AND user_id=? AND csrf=? AND expires_at>?",
+            session.hash,
+            user,
+            session.csrf,
+            now(),
+          ),
+          401,
+          "Sign in to continue.",
+        );
+      let checkAccess = () => {};
+      const readBody = async () => {
+        const value = await body(req);
+        checkSession();
+        checkAccess();
+        return value;
+      };
       if (mutating)
         assert(
           req.headers["x-csrf-token"] === session.csrf,
@@ -261,13 +288,14 @@ export function application(
         );
       if (path === "/api/password" && method === "POST") {
         rate(s, `password:${user}`, 5, 900000);
-        const b = await body(req);
+        const b = await readBody();
         const old = s.get("SELECT password_hash FROM users WHERE id=?", user)!;
         assert(
           await verifyPassword(passwordValue(b.current), old.password_hash),
           403,
           "Current password is incorrect.",
         );
+        checkSession();
         const next = hashPassword(passwordValue(b.next, 14));
         s.transaction(() => {
           const updated = s.run(
@@ -367,7 +395,7 @@ export function application(
         return;
       }
       if (path === "/api/preferences" && method === "PATCH") {
-        const b = await body(req);
+        const b = await readBody();
         assert(
           typeof b.activity === "boolean",
           400,
@@ -382,7 +410,7 @@ export function application(
         return;
       }
       if (path === "/api/invitations/accept" && method === "POST") {
-        d.accept(user, (await body(req)).token);
+        d.accept(user, (await readBody()).token);
         send(res, 200, { ok: true });
         return;
       }
@@ -394,7 +422,7 @@ export function application(
         return;
       }
       if (path === "/api/projects" && method === "POST") {
-        send(res, 201, d.createProject(user, await body(req)));
+        send(res, 201, d.createProject(user, await readBody()));
         return;
       }
       if (path === "/api/notifications" && method === "GET") {
@@ -452,7 +480,8 @@ export function application(
       const inquiry = path.match(/^\/api\/pipeline\/([^/]+)$/);
       if (inquiry && method === "PATCH") {
         founder(s, config.organization, user);
-        const b = await body(req);
+        const b = await readBody();
+        founder(s, config.organization, user);
         s.transaction(() => {
           const out = s.run(
             "UPDATE inquiries SET status=?,version=version+1 WHERE id=? AND organization_id=? AND version=?",
@@ -474,7 +503,8 @@ export function application(
       const convert = path.match(/^\/api\/pipeline\/([^/]+)\/project$/);
       if (convert && method === "POST") {
         founder(s, config.organization, user);
-        const b = await body(req);
+        const b = await readBody();
+        founder(s, config.organization, user);
         const i = s.get(
           "SELECT * FROM inquiries WHERE id=? AND organization_id=?",
           convert[1]!,
@@ -514,6 +544,15 @@ export function application(
         404,
         "Project not found.",
       );
+      checkAccess = () => {
+        const current = membership(s, project, user, !client);
+        assert(
+          current.organization_id === config.organization &&
+            (!client || current.role === "client"),
+          404,
+          "Project not found.",
+        );
+      };
       if (tail === "" && method === "GET") {
         const params = new URL(req.url!, config.origin).searchParams;
         const view = d.room(user, project, client, {
@@ -537,35 +576,39 @@ export function application(
         return;
       }
       if (tail === "" && method === "PATCH" && !client) {
-        d.projectUpdate(user, project, await body(req));
+        d.projectUpdate(user, project, await readBody());
         send(res, 200, { ok: true });
         return;
       }
       if (tail === "/brief-revisions" && method === "POST" && !client) {
-        send(res, 201, d.briefRevision(user, project, await body(req)));
+        send(res, 201, d.briefRevision(user, project, await readBody()));
         return;
       }
       if (tail === "/ownership-plan" && method === "POST" && !client) {
-        send(res, 201, d.ownershipRevision(user, project, await body(req)));
+        send(res, 201, d.ownershipRevision(user, project, await readBody()));
         return;
       }
       const milestone = tail.match(/^\/milestones(?:\/([^/]+))?$/);
       if (milestone && !client) {
         if (!milestone[1] && method === "POST") {
-          send(res, 201, d.milestone(user, project, await body(req)));
+          send(res, 201, d.milestone(user, project, await readBody()));
           return;
         }
         if (milestone[1] && method === "PATCH") {
           send(
             res,
             200,
-            d.milestone(user, project, await body(req), milestone[1]),
+            d.milestone(user, project, await readBody(), milestone[1]),
           );
           return;
         }
       }
       if (tail === "/client-decisions" && method === "POST" && !client) {
-        send(res, 201, d.requestClientDecision(user, project, await body(req)));
+        send(
+          res,
+          201,
+          d.requestClientDecision(user, project, await readBody()),
+        );
         return;
       }
       const clientDecision = tail.match(
@@ -577,7 +620,7 @@ export function application(
             user,
             project,
             clientDecision[1]!,
-            await body(req),
+            await readBody(),
           );
           send(res, 200, { ok: true });
           return;
@@ -587,7 +630,7 @@ export function application(
             user,
             project,
             clientDecision[1]!,
-            await body(req),
+            await readBody(),
           );
           send(res, 200, { ok: true });
           return;
@@ -609,7 +652,7 @@ export function application(
         return;
       }
       if (tail === "/records" && method === "POST") {
-        send(res, 201, d.createRecord(user, project, await body(req)));
+        send(res, 201, d.createRecord(user, project, await readBody()));
         return;
       }
       const record = tail.match(
@@ -654,17 +697,17 @@ export function application(
           return;
         }
         if (method === "POST" && record[2] === "/status") {
-          d.supportState(user, project, recordId, await body(req));
+          d.supportState(user, project, recordId, await readBody());
           send(res, 200, { ok: true });
           return;
         }
         if (method === "PATCH" && !record[2]) {
-          d.editRecord(user, project, recordId, await body(req));
+          d.editRecord(user, project, recordId, await readBody());
           send(res, 200, { ok: true });
           return;
         }
         if (method === "POST" && record[2] === "/decision" && !client) {
-          d.decide(user, project, recordId, await body(req));
+          d.decide(user, project, recordId, await readBody());
           send(res, 200, { ok: true });
           return;
         }
@@ -672,7 +715,7 @@ export function application(
       if (tail === "/invitations" && !client) {
         owner(s, project, user);
         if (method === "POST") {
-          send(res, 201, d.invite(user, project, await body(req)));
+          send(res, 201, d.invite(user, project, await readBody()));
           return;
         }
         if (method === "GET") {
@@ -705,19 +748,19 @@ export function application(
       }
       const member = tail.match(/^\/members\/([^/]+)$/);
       if (member && method === "PATCH" && !client) {
-        d.memberUpdate(user, project, member[1]!, await body(req));
+        d.memberUpdate(user, project, member[1]!, await readBody());
         send(res, 200, { ok: true });
         return;
       }
       const task = tail.match(/^\/tasks(?:\/([^/]+))?$/);
       if (task && ["POST", "PATCH"].includes(method) && !client) {
         assert((method === "PATCH") === !!task[1], 405, "Method not allowed.");
-        d.task(user, project, await body(req), task[1]);
+        d.task(user, project, await readBody(), task[1]);
         send(res, method === "POST" ? 201 : 200, { ok: true });
         return;
       }
       if (tail === "/releases" && method === "POST" && !client) {
-        send(res, 201, d.release(user, project, await body(req)));
+        send(res, 201, d.release(user, project, await readBody()));
         return;
       }
       const observePreview = tail.match(
@@ -741,6 +784,8 @@ export function application(
           release.demo_url,
           release.commit_sha,
         );
+        checkSession();
+        checkAccess();
         const receipt = d.recordPreviewObservation(
           user,
           project,
@@ -773,6 +818,8 @@ export function application(
           repo.full_name,
           release.commit_sha,
         );
+        checkSession();
+        checkAccess();
         const receipt = d.recordSourceEvidence(
           user,
           project,
@@ -784,7 +831,7 @@ export function application(
       }
       const review = tail.match(/^\/releases\/([^/]+)\/review$/);
       if (review && method === "POST") {
-        d.reviewRelease(user, project, review[1]!, await body(req));
+        d.reviewRelease(user, project, review[1]!, await readBody());
         send(res, 200, { ok: true });
         return;
       }
@@ -792,7 +839,9 @@ export function application(
         if (tail === "/github" && method === "PUT") {
           owner(s, project, user);
           founder(s, config.organization, user);
-          const repo = text((await body(req)).repository, "Repository", 150);
+          const repo = text((await readBody()).repository, "Repository", 150);
+          owner(s, project, user);
+          founder(s, config.organization, user);
           github.allow(repo);
           s.transaction(() => {
             s.run(
@@ -813,20 +862,36 @@ export function application(
           project,
         );
         assert(repo, 409, "No repository is connected.");
+        const readGithub = async (pending: Promise<unknown>) => {
+          const value = await pending;
+          checkSession();
+          checkAccess();
+          assert(
+            s.get(
+              "SELECT full_name FROM repositories WHERE project_id=?",
+              project,
+            )?.full_name === repo.full_name,
+            409,
+            "The repository binding changed during this request.",
+          );
+          return value;
+        };
         rate(s, `github:${user}`, 60, 60000);
         const params = new URL(req.url!, config.origin).searchParams;
         if (tail === "/github") {
-          send(res, 200, await github.evidence(repo.full_name));
+          send(res, 200, await readGithub(github.evidence(repo.full_name)));
           return;
         }
         if (tail === "/github/source") {
           send(
             res,
             200,
-            await github.source(
-              repo.full_name,
-              params.get("path") ?? "",
-              params.get("ref") ?? "HEAD",
+            await readGithub(
+              github.source(
+                repo.full_name,
+                params.get("path") ?? "",
+                params.get("ref") ?? "HEAD",
+              ),
             ),
           );
           return;
@@ -837,7 +902,9 @@ export function application(
           send(
             res,
             200,
-            await github.read(repo.full_name, `commits/${sha}/check-runs`),
+            await readGithub(
+              github.read(repo.full_name, `commits/${sha}/check-runs`),
+            ),
           );
           return;
         }
@@ -852,7 +919,9 @@ export function application(
           send(
             res,
             200,
-            await github.read(repo.full_name, `compare/${base}...${head}`),
+            await readGithub(
+              github.read(repo.full_name, `compare/${base}...${head}`),
+            ),
           );
           return;
         }

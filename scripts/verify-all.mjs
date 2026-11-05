@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const started = new Date().toISOString(),
@@ -10,22 +10,48 @@ const commands = [
   ["npm", ["test"]],
   ["npm", ["run", "build"]],
   ["npm", ["run", "test:distribution"]],
+  ["npm", ["run", "artifact:create"]],
+  ["npm", ["run", "artifact:verify"]],
+  ["npm", ["run", "test:installation"]],
+  ["npm", ["run", "test:staging"]],
+  ["npm", ["run", "test:tls"]],
+  ["npm", ["run", "test:container"]],
   ["npm", ["run", "test:browser"]],
+  ["npm", ["run", "test:browser"], { MIZVO_BROWSER: "webkit" }],
   ...(live ? [["npm", ["run", "verify:github"]]] : []),
-  ["npm", ["audit", "--json"]],
+  ["npm", ["audit", "--omit=dev", "--audit-level=high", "--json"]],
 ];
+const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+const sourceIdentity = {
+  checkout_commit: git("rev-parse", "HEAD"),
+  checkout_tree: git("rev-parse", "HEAD^{tree}"),
+  source_worktree_dirty: !!git(
+    "status",
+    "--porcelain",
+    "--",
+    "apps",
+    "packages",
+    "scripts",
+    "tests",
+    ".github",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+  ),
+};
 const results = [];
 let transcript = "";
-for (const [command, args] of commands) {
+for (const [command, args, environment] of commands) {
   const before = Date.now();
   const result = spawnSync(command, args, {
     encoding: "utf8",
-    env: process.env,
+    env: { ...process.env, ...environment },
     timeout: 180000,
     maxBuffer: 8 * 1024 * 1024,
   });
   const output = (result.stdout ?? "") + (result.stderr ?? "");
-  const label = [command, ...args].join(" ");
+  const label =
+    (environment ? "MIZVO_BROWSER=webkit " : "") + [command, ...args].join(" ");
   results.push({
     command: label,
     exit_code: result.status,
@@ -60,6 +86,7 @@ await writeFile(
     {
       started_at: started,
       finished_at: new Date().toISOString(),
+      source: sourceIdentity,
       runtime: process.version,
       platform: process.platform,
       architecture: process.arch,

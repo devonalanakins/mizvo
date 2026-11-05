@@ -74,3 +74,8 @@ This is a single-organization installation with explicit organization IDs and pr
 The V0.4 archive was inspected and preserved separately. Its 55-file source manifest and 16 prototype tests were reproduced, but none of its unlicensed executable source, screenshots, or private operating documents was imported into this branch. The new interface follows the approved visual contract through normal DOM, CSS, and an original SVG illustration; it does not embed a concept board. Downloaded Fontsource fonts carry their original SIL Open Font License notices in the build. See [provenance](docs/PROVENANCE.md).
 
 No clients, staff, contracts, certifications, legal entity status, live presence, test results, or deployments are invented. Sam and other prospective collaborators have not been invited.
+
+
+### V0.16 integration review
+
+The preserved V0.15 stack is consolidated on `integration/verified-platform-v0-16` for a single draft review against main. [Inventory, demonstrated defects, additive migration, verification boundaries and private staging gates](docs/V0.16-INTEGRATION.md). Source implementation and synthetic verification do not establish a deployed service. Production remains **RELEASE_NO_GO**.

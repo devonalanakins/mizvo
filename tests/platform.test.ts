@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { request as httpRequest } from "node:http";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -3290,5 +3291,338 @@ test("preview observations preserve exact release binding, reauthorize after I/O
     assert.equal(hits, 6);
   } finally {
     await f.stop();
+  }
+});
+
+test("client release reviews exclude engineering comments and other clients' responses", async () => {
+  const f = await fixture();
+  try {
+    const a = await f.login(f.users.owner.email);
+    const engineer = await f.login(f.users.contributor.email);
+    const client = await f.login(f.users.client.email);
+    const other = await f.login(f.users.other.email);
+    const p = f.app.domain.createProject(f.users.owner.id, {
+      name: "Review privacy",
+      purpose: "Keep engineering review private.",
+    });
+    for (const [person, role] of [
+      [f.users.contributor, "contributor"],
+      [f.users.client, "client"],
+      [f.users.other, "client"],
+    ] as const) {
+      const i = f.app.domain.invite(f.users.owner.id, p.id, {
+        email: person.email,
+        role,
+      });
+      f.app.domain.accept(person.id, i.token);
+    }
+    const path = `/projects/${p.id}`;
+    const release = (
+      await f.request(
+        path + "/releases",
+        "POST",
+        {
+          label: "Privacy version",
+          summary: "Shared version",
+          commit_sha: "a".repeat(40),
+          rollback: "Keep previous version",
+          visibility: "client",
+        },
+        a,
+      )
+    ).value;
+    for (const [session, prefix, comment] of [
+      [engineer, "", "PRIVATE_ENGINEERING_FINDING"],
+      [client, "/space", "CLIENT_ONE_RESPONSE"],
+      [other, "/space", "CLIENT_TWO_RESPONSE"],
+    ] as const) {
+      assert.equal(
+        (
+          await f.request(
+            prefix + path + `/releases/${release.id}/review`,
+            "POST",
+            { outcome: "approved", comment },
+            session,
+          )
+        ).status,
+        200,
+      );
+    }
+    const own = (await f.request("/space" + path, "GET", undefined, client))
+      .value;
+    assert.equal(
+      JSON.stringify(own).includes("PRIVATE_ENGINEERING_FINDING"),
+      false,
+    );
+    assert.equal(JSON.stringify(own).includes("CLIENT_TWO_RESPONSE"), false);
+    assert.equal(own.releases[0].reviews[0].comment, "CLIENT_ONE_RESPONSE");
+    const internal = (await f.request(path, "GET", undefined, a)).value;
+    assert.equal(internal.releases[0].reviews.length, 3);
+    assert.equal(
+      internal.releases[0].reviews.find(
+        (r: any) => r.comment === "PRIVATE_ENGINEERING_FINDING",
+      ).audience,
+      "internal",
+    );
+    // Role changes cannot retroactively publish a historical engineering comment.
+    f.app.domain.memberUpdate(f.users.owner.id, p.id, f.users.contributor.id, {
+      role: "client",
+    });
+    assert.equal(
+      JSON.stringify(
+        (await f.request("/space" + path, "GET", undefined, engineer)).value,
+      ).includes("PRIVATE_ENGINEERING_FINDING"),
+      false,
+    );
+    assert.equal(
+      (await f.request("/space" + path, "GET", undefined, engineer)).value
+        .releases[0].review_recorded,
+      true,
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
+test("revoked or expired sessions cannot finish a delayed authenticated write", async () => {
+  const f = await fixture();
+  try {
+    for (const expire of [false, true]) {
+      const a = await f.login(f.users.owner.email);
+      const result = new Promise<number>((resolve, reject) => {
+        const req = httpRequest(
+          f.config.origin + "/api/projects",
+          {
+            method: "POST",
+            headers: {
+              Origin: f.config.origin,
+              Cookie: a.cookie,
+              "X-CSRF-Token": a.csrf,
+              "Content-Type": "application/json",
+            },
+          },
+          (res) => {
+            res.resume();
+            res.on("end", () => resolve(res.statusCode!));
+          },
+        );
+        req.on("error", reject);
+        f.app.server.once("request", () =>
+          setImmediate(() => {
+            if (expire)
+              f.app.s.run(
+                "UPDATE sessions SET expires_at='2000-01-01' WHERE user_id=?",
+                f.users.owner.id,
+              );
+            else
+              f.app.s.run(
+                "DELETE FROM sessions WHERE user_id=?",
+                f.users.owner.id,
+              );
+            req.end(
+              JSON.stringify({
+                name: "Revoked write",
+                purpose: "Must never persist.",
+              }),
+            );
+          }),
+        );
+        req.flushHeaders();
+      });
+      assert.equal(await result, 401);
+      assert.equal(f.app.s.get("SELECT COUNT(*) AS n FROM projects")!.n, 0);
+    }
+  } finally {
+    await f.stop();
+  }
+});
+
+test("GitHub responses recheck session, project role and repository after provider awaits", async () => {
+  let entered!: () => void, release!: () => void;
+  let started: Promise<void>, gate: Promise<void>;
+  const github = new GitHub(["devonalanakins/mizvo"], undefined, async () => {
+    entered();
+    await gate;
+    return Response.json({
+      path: "private.txt",
+      content: Buffer.from("PRIVATE_PROVIDER_SOURCE").toString("base64"),
+      encoding: "base64",
+      size: 23,
+    });
+  });
+  const f = await fixture(github);
+  try {
+    const p = f.app.domain.createProject(f.users.owner.id, {
+      name: "Provider race",
+      purpose: "Never return private evidence after access changes.",
+    });
+    const i = f.app.domain.invite(f.users.owner.id, p.id, {
+      email: f.users.contributor.email,
+      role: "contributor",
+    });
+    f.app.domain.accept(f.users.contributor.id, i.token);
+    for (const change of ["session", "role", "repository"] as const) {
+      f.app.s.run(
+        "UPDATE memberships SET role='contributor' WHERE project_id=? AND user_id=?",
+        p.id,
+        f.users.contributor.id,
+      );
+      f.app.s.run(
+        "INSERT OR REPLACE INTO repositories VALUES (?,?,?,?)",
+        p.id,
+        "devonalanakins/mizvo",
+        f.users.owner.id,
+        new Date().toISOString(),
+      );
+      const engineer = await f.login(f.users.contributor.email);
+      started = new Promise((r) => {
+        entered = r;
+      });
+      gate = new Promise((r) => {
+        release = r;
+      });
+      const pending = f.request(
+        `/projects/${p.id}/github/source?path=private.txt`,
+        "GET",
+        undefined,
+        engineer,
+      );
+      await started;
+      if (change === "session")
+        f.app.s.run(
+          "DELETE FROM sessions WHERE user_id=?",
+          f.users.contributor.id,
+        );
+      if (change === "role")
+        f.app.domain.memberUpdate(
+          f.users.owner.id,
+          p.id,
+          f.users.contributor.id,
+          { role: "client" },
+        );
+      if (change === "repository")
+        f.app.s.run("DELETE FROM repositories WHERE project_id=?", p.id);
+      release();
+      const result = await pending;
+      assert.equal(
+        result.status,
+        change === "session" ? 401 : change === "role" ? 404 : 409,
+      );
+      assert.equal(
+        JSON.stringify(result.value).includes("PRIVATE_PROVIDER_SOURCE"),
+        false,
+      );
+    }
+  } finally {
+    release?.();
+    await f.stop();
+  }
+});
+
+test("a password changed during scrypt verification cannot mint a stale login session", async () => {
+  const f = await fixture();
+  try {
+    const { hashPassword } = await import("../packages/authz/security.ts");
+    const replacement = hashPassword("Replacement-password-for-race-test");
+    let completed = false;
+    const pending = f
+      .request("/login", "POST", { email: f.users.owner.email, password })
+      .then((r) => {
+        completed = true;
+        return r;
+      });
+    const deadline = Date.now() + 5000;
+    while (!f.app.s.get("SELECT 1 FROM rate_limits WHERE key LIKE 'login:%'")) {
+      assert(
+        Date.now() < deadline,
+        "Login must reach its verification boundary.",
+      );
+      await new Promise((r) => setTimeout(r, 1));
+    }
+    assert.equal(
+      completed,
+      false,
+      "Change the credential while scrypt is still pending.",
+    );
+    f.app.s.run(
+      "UPDATE users SET password_hash=? WHERE id=?",
+      replacement,
+      f.users.owner.id,
+    );
+    const result = await pending;
+    assert.equal(result.status, 401);
+    assert.equal(result.headers.has("set-cookie"), false);
+    assert.equal(f.app.s.get("SELECT COUNT(*) AS n FROM sessions")!.n, 0);
+  } finally {
+    await f.stop();
+  }
+});
+
+test("V0.15 review migration preserves original rows, defaults private, and refuses downgrade", async () => {
+  const { mkdirSync, copyFileSync, readdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "mizvo-review-upgrade-"));
+  const directory = join(root, "migrations"),
+    database = join(root, "data.sqlite");
+  mkdirSync(directory);
+  for (const name of readdirSync("packages/storage").filter((n) =>
+    /^00[1-8]-.+\.sql$/.test(n),
+  ))
+    copyFileSync("packages/storage/" + name, join(directory, name));
+  let store: Store | undefined;
+  try {
+    store = new Store(database, directory);
+    store.run("INSERT INTO organizations VALUES ('old','Legacy')");
+    const author = account(
+      store,
+      "Legacy Founder",
+      "legacy-author@example.test",
+      password,
+      "old",
+      "founder",
+    );
+    const reviewer = account(
+      store,
+      "Legacy Reviewer",
+      "legacy-reviewer@example.test",
+      password,
+      null,
+    );
+    const { Domain } = await import("../packages/domain/service.ts");
+    const d = new Domain(store, "old");
+    const project = d.createProject(author.id, {
+      name: "Legacy room",
+      purpose: "Preserve original reviews.",
+    });
+    const release = d.release(author.id, project.id, {
+      label: "Legacy version",
+      summary: "Historical version",
+      commit_sha: "a".repeat(40),
+      rollback: "Restore snapshot",
+    });
+    store.run(
+      "INSERT INTO release_reviews VALUES ('legacy-review',?,?, 'approved','Legacy engineering text','2026-01-01')",
+      release.id,
+      reviewer.id,
+    );
+    const original = store.get(
+      "SELECT * FROM release_reviews WHERE id='legacy-review'",
+    );
+    store.close();
+    store = undefined;
+    store = new Store(database);
+    const upgraded = store.get(
+      "SELECT * FROM release_reviews WHERE id='legacy-review'",
+    )!;
+    const { audience, ...preserved } = upgraded;
+    assert.equal(audience, "internal");
+    assert.deepEqual(preserved, { ...original });
+    assert.equal(store.get("PRAGMA integrity_check")!.integrity_check, "ok");
+    assert.deepEqual(store.all("PRAGMA foreign_key_check"), []);
+    store.close();
+    store = undefined;
+    assert.throws(() => new Store(database, directory), /does not support/);
+  } finally {
+    store?.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });

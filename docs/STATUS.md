@@ -1,5 +1,7 @@
 # Capability status
 
+V0.16 consolidates the preserved implementation stack into one main-targeted draft. See [integration inventory, audit and staging gates](V0.16-INTEGRATION.md). Session/provider waits now reauthorize current access; release reviews retain an immutable audience and Client Space receives only the client’s own feedback. Migration 009 preserves legacy reviews as internal. Runtime version is 0.16.0; no deployment is implied.
+
 All implementation below is locally runnable review source, with public publication approved under AGPL-3.0-only. No application deployment is LIVE. Test evidence is recorded separately in VERIFICATION; these labels do not imply public release or legal/business status.
 
 | Area | Implemented | Boundaries / incomplete |

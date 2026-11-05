@@ -1,5 +1,7 @@
 # Code-integrity audit — V0.5 private review
 
+**Historical baseline below.** [V0.16 integration audit](V0.16-INTEGRATION.md) records current source reconstruction, new demonstrated findings and corrections, migration 009 and remaining gates. The same-agent adversarial review is not independent human approval. Later pagination, preview-network, OCI and installation work supersede corresponding incomplete baseline observations.
+
 **CLAIM:** Operational local Room/collaboration foundation plus connected initial Discover, Studio and Client Space workflows. No full-platform completion, independent human review, production deployment or security certification.
 
 **OBSERVED:** The code path is browser JSON input → session/Origin/CSRF boundary → current organization/project membership → validated domain operation → atomic SQLite record/history/audit update → explicitly scoped response. The client response is constructed as a whitelist projection. The GitHub adapter reads an allowlisted host/repository and never accepts a shell command or arbitrary fetch URL.

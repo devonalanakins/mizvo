@@ -31,3 +31,10 @@ Account identity verification/provisioning is administrative. Self-service passw
 One process with local SQLite is suitable for the verified small-installation topology. Room record reads are bounded to 50 by default and 100 maximum per page, with scoped keyset cursors and direct-record authorization. Tasks/releases and loaded DOM accumulation still need larger-data performance work; distributed-operation testing remains incomplete. There is no offline record cache: the application keeps unsaved text in the current page and reports network errors; it does not claim offline synchronization or background retries.
 
 Node’s documented SQLite API is a release candidate in the verified Node 24.22.1 runtime, rather than a claim of cross-runtime support. Pin and review runtime updates. Official reference: <https://nodejs.org/download/release/v24.22.1/docs/api/sqlite.html>.
+
+
+## V0.16 asynchronous authorization and review audiences
+
+Authenticated JSON bodies recheck the current session after the stream completes. Project-scoped writes also recheck current project/surface access, and owner/founder operations retain their stricter gates. GitHub reads recheck the session, current grant and repository binding before sending provider results. Source/preview observations recheck the session before persisting their receipt. Password verification cannot create a session from a hash replaced during scrypt; password changes recheck session validity after verification.
+
+Release-review audience is stored at write by migration 009. Clients see only their own client-audience feedback; internal comments and other client responses remain internal. Earlier reviews default internal because historical role provenance is unavailable. Current role changes never reclassify earlier comments. A private own-review boolean prevents offering a duplicate review without disclosing its text. These controls have synthetic negative HTTP regressions, not human security certification. See [V0.16 audit](V0.16-INTEGRATION.md).

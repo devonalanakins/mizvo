@@ -247,6 +247,11 @@ export class Domain {
       )
       .map((r) => ({
         ...r,
+        review_recorded: !!this.s.get(
+          "SELECT 1 FROM release_reviews WHERE release_id=? AND actor_id=?",
+          r.id,
+          user,
+        ),
         source_evidence: client
           ? undefined
           : this.s
@@ -275,8 +280,9 @@ export class Domain {
               : p,
           ),
         reviews: this.s.all(
-          "SELECT rr.*,u.name AS actor FROM release_reviews rr JOIN users u ON u.id=rr.actor_id WHERE rr.release_id=?",
+          `SELECT rr.*,u.name AS actor FROM release_reviews rr JOIN users u ON u.id=rr.actor_id WHERE rr.release_id=?${client ? " AND rr.audience='client' AND rr.actor_id=?" : ""}`,
           r.id,
+          ...(client ? [user] : []),
         ),
       }));
     if (client)
@@ -351,6 +357,7 @@ export class Domain {
             created_at,
             reviews,
             preview_observations,
+            review_recorded,
           }) => ({
             id,
             label,
@@ -360,6 +367,7 @@ export class Domain {
             created_at,
             reviews,
             preview_observations,
+            review_recorded,
           }),
         ),
       };
@@ -1426,13 +1434,14 @@ export class Domain {
         "Your review of this immutable version is already recorded.",
       );
       this.s.run(
-        "INSERT INTO release_reviews VALUES (?,?,?,?,?,?)",
+        "INSERT INTO release_reviews(id,release_id,actor_id,outcome,comment,created_at,audience) VALUES (?,?,?,?,?,?,?)",
         id(),
         release,
         user,
         outcome,
         text(b.comment, "Review comment", 2000),
         now(),
+        m.role === "client" ? "client" : "internal",
       );
       this.audit(project, user, "release.reviewed", release);
     });
