@@ -79,7 +79,11 @@ test("preview refuses mixed DNS answers, family spoofing and empty or excessive 
   ];
   for (const answers of cases) {
     await assert.rejects(
-      () => resolvePublicPreview("preview.example.org", async () => answers as never),
+      () =>
+        resolvePublicPreview(
+          "preview.example.org",
+          async () => answers as never,
+        ),
       /not a permitted public address/,
     );
   }
@@ -173,11 +177,18 @@ test("preview pins the vetted IP and retains TLS hostname and certificate valida
   };
   const controller = new AbortController();
   const guarded = createGuardedPreviewFetch(resolver, dial);
-  const response = await guarded(url, { ...requestInit, signal: controller.signal });
+  const response = await guarded(url, {
+    ...requestInit,
+    signal: controller.signal,
+  });
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("X-Mizvo-Source-Commit"), sha);
   assert.equal(dials, 1);
-  assert.equal(resolutions, 1, "Never perform a second DNS lookup after validating the IP");
+  assert.equal(
+    resolutions,
+    1,
+    "Never perform a second DNS lookup after validating the IP",
+  );
   const pinned = pinnedPreviewOptions(new URL(url), {
     address: "2606:4700:4700::1111",
     family: 6,

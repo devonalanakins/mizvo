@@ -42,10 +42,7 @@ export function isPublicPreviewIp(address: string): boolean {
   const family = isIP(address);
   if (family === 4) return !blockedV4.check(address, "ipv4");
   if (family === 6)
-    return (
-      publicV6.check(address, "ipv6") &&
-      !blockedV6.check(address, "ipv6")
-    );
+    return publicV6.check(address, "ipv6") && !blockedV6.check(address, "ipv6");
   return false;
 }
 
@@ -113,7 +110,9 @@ export async function resolvePublicPreview(
         !isPublicPreviewIp(item.address),
     )
   )
-    throw new Error("Preview DNS destination is not a permitted public address.");
+    throw new Error(
+      "Preview DNS destination is not a permitted public address.",
+    );
   return answers[0]!;
 }
 
@@ -198,10 +197,19 @@ export function createGuardedPreviewFetch(
       init?.redirect !== "manual" ||
       init?.credentials !== "omit"
     )
-      throw new Error("Preview transport requires an exact read-only public HTTPS request.");
+      throw new Error(
+        "Preview transport requires an exact read-only public HTTPS request.",
+      );
 
-    const destination = await resolvePublicPreview(target.hostname, resolver, init.signal);
-    const result = await dial(pinnedPreviewOptions(target, destination), init.signal);
+    const destination = await resolvePublicPreview(
+      target.hostname,
+      resolver,
+      init.signal,
+    );
+    const result = await dial(
+      pinnedPreviewOptions(target, destination),
+      init.signal,
+    );
     const headers = new Headers();
     if (result.reported_commit)
       headers.set("X-Mizvo-Source-Commit", result.reported_commit);

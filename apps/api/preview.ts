@@ -32,7 +32,10 @@ function safePreviewUrl(input: string): string {
 export class PreviewProbe {
   private readonly allowlist: ReadonlySet<string>;
   private readonly transport: typeof fetch;
-  constructor(urls: string[] = [], transport: typeof fetch = guardedPreviewFetch) {
+  constructor(
+    urls: string[] = [],
+    transport: typeof fetch = guardedPreviewFetch,
+  ) {
     this.allowlist = new Set(urls.map((u) => safePreviewUrl(u)));
     this.transport = transport;
   }
