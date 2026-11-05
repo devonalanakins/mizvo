@@ -562,10 +562,25 @@ function milestoneForm(m?: Data) {
   return form(
     m ? `edit-milestone:${m.id}` : "milestone",
     field("Milestone title", "title", m?.title ?? "") +
-      textarea("Outcome and acceptance context", "summary", m?.summary ?? "", false) +
+      textarea(
+        "Outcome and acceptance context",
+        "summary",
+        m?.summary ?? "",
+        false,
+      ) +
       field("Target date", "target_date", m?.target_date ?? "", "date", false) +
-      select("Milestone status", "status", ["planned", "active", "blocked", "review", "done"], m?.status ?? "planned") +
-      select("Milestone visibility", "visibility", ["internal", "client"], m?.visibility ?? "internal") +
+      select(
+        "Milestone status",
+        "status",
+        ["planned", "active", "blocked", "review", "done"],
+        m?.status ?? "planned",
+      ) +
+      select(
+        "Milestone visibility",
+        "visibility",
+        ["internal", "client"],
+        m?.visibility ?? "internal",
+      ) +
       `<input type="hidden" name="version" value="${m?.version ?? ""}"><p class="notice">Only shared checkpoints appear in Client Space. A completed milestone does not approve or deploy a release.</p>`,
     "Save milestone",
   );
@@ -575,7 +590,11 @@ function taskForm(t?: Data) {
   return form(
     t ? `edit-task:${t.id}` : "task",
     field("Task", "title", t?.title ?? "") +
-      field("Milestone label (unlinked tasks)", "milestone", t?.milestone ?? "Project") +
+      field(
+        "Milestone label (unlinked tasks)",
+        "milestone",
+        t?.milestone ?? "Project",
+      ) +
       `<label class="field">Linked milestone<select name="milestone_id"><option value="">No linked milestone</option>${(p.milestones ?? []).map((m: Data) => `<option value="${e(m.id)}" ${t?.milestone_id === m.id ? "selected" : ""}>${e(m.title)}</option>`).join("")}</select></label>` +
       select(
         "Status",

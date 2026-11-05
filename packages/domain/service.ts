@@ -636,7 +636,11 @@ export class Domain {
   }
   milestone(user: string, project: string, b: Row, milestoneId?: string) {
     const access = owner(this.s, project, user);
-    assert(access.organization_id === this.organization, 404, "Project not found.");
+    assert(
+      access.organization_id === this.organization,
+      404,
+      "Project not found.",
+    );
     const title = text(b.title, "Milestone title", 200),
       summary = text(b.summary ?? "", "Milestone summary", 4000, 0),
       status = choice(
@@ -688,26 +692,54 @@ export class Domain {
           409,
           "Complete linked tasks before closing this milestone.",
         );
-      const key = milestoneId ?? id(), stamp = now();
+      const key = milestoneId ?? id(),
+        stamp = now();
       if (milestoneId) {
         const updated = this.s.run(
           "UPDATE project_milestones SET title=?,summary=?,status=?,visibility=?,target_date=?,version=version+1,updated_at=? WHERE id=? AND project_id=? AND version=?",
-          title, summary, status, visibility, targetDate, stamp,
-          key, project, version(b.version),
+          title,
+          summary,
+          status,
+          visibility,
+          targetDate,
+          stamp,
+          key,
+          project,
+          version(b.version),
         );
-        assert(updated.changes, 409, "Milestone changed. Reload before updating.");
-        if (old.title !== title)
+        assert(
+          updated.changes,
+          409,
+          "Milestone changed. Reload before updating.",
+        );
+        if (old && old.title !== title)
           this.s.run(
             "UPDATE tasks SET milestone=?,version=version+1,updated_at=? WHERE milestone_id=?",
-            title, stamp, key,
+            title,
+            stamp,
+            key,
           );
       } else {
         this.s.run(
           "INSERT INTO project_milestones(id,project_id,title,summary,status,visibility,target_date,actor_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-          key, project, title, summary, status, visibility, targetDate, user, stamp, stamp,
+          key,
+          project,
+          title,
+          summary,
+          status,
+          visibility,
+          targetDate,
+          user,
+          stamp,
+          stamp,
         );
       }
-      this.audit(project, user, milestoneId ? "milestone.updated" : "milestone.created", key);
+      this.audit(
+        project,
+        user,
+        milestoneId ? "milestone.updated" : "milestone.created",
+        key,
+      );
       return { id: key };
     });
   }

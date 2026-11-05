@@ -517,7 +517,11 @@ export function application(
           return;
         }
         if (milestone[1] && method === "PATCH") {
-          send(res, 200, d.milestone(user, project, await body(req), milestone[1]));
+          send(
+            res,
+            200,
+            d.milestone(user, project, await body(req), milestone[1]),
+          );
           return;
         }
       }
