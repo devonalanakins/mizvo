@@ -49,7 +49,9 @@ const ownerContext = await browser.newContext({
   page = await ownerContext.newPage();
 const errors = [],
   csp = [],
-  checks = [];
+  checks = [],
+  screenshotPolicyChecks = [],
+  screenshotConsole = new Map();
 function observe(page) {
   page.on("pageerror", (err) => errors.push(err.message));
   page.on("console", (msg) => {
@@ -57,7 +59,7 @@ function observe(page) {
       msg.type() === "error" &&
       msg.text().includes("Content Security Policy")
     )
-      csp.push(msg.text());
+      (screenshotConsole.get(page) ?? csp).push(msg.text());
   });
 }
 observe(page);
@@ -93,14 +95,79 @@ async function api(p, path, method = "GET", body) {
     { path, method, body },
   );
 }
+async function verifiedScreenshot(p, path) {
+  // Playwright 1.57's WebKit screenshot preparation injects exactly "body {}"
+  // to synchronize animations. Strict CSP correctly blocks that tooling style.
+  // Account for this negative security check using actual DOM/policy events;
+  // any extra style, different violation, or out-of-screenshot error still fails.
+  await p.evaluate(() => {
+    const evidence = { styles: [], violations: [] };
+    const observer = new MutationObserver((records) => {
+      for (const record of records)
+        for (const node of record.addedNodes)
+          if (node instanceof HTMLStyleElement)
+            evidence.styles.push(node.textContent);
+    });
+    const onViolation = (event) =>
+      evidence.violations.push({
+        blocked: event.blockedURI,
+        directive: event.effectiveDirective,
+        disposition: event.disposition,
+      });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+    document.addEventListener("securitypolicyviolation", onViolation);
+    window.__mizvoScreenshotProbe = { evidence, observer, onViolation };
+  });
+  const messages = [];
+  screenshotConsole.set(p, messages);
+  let probe;
+  try {
+    await p.screenshot({ path, fullPage: true });
+    probe = await p.evaluate(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const { evidence, observer, onViolation } = window.__mizvoScreenshotProbe;
+      observer.disconnect();
+      document.removeEventListener("securitypolicyviolation", onViolation);
+      delete window.__mizvoScreenshotProbe;
+      return evidence;
+    });
+  } finally {
+    screenshotConsole.delete(p);
+  }
+  if (engine === "webkit") {
+    assert.deepEqual(
+      probe.styles,
+      ["body {}"],
+      "Only the reviewed runner synchronization style is expected.",
+    );
+    assert.deepEqual(
+      probe.violations,
+      [
+        {
+          blocked: "inline",
+          directive: "style-src-elem",
+          disposition: "enforce",
+        },
+      ],
+      "CSP must reject exactly the runner's injected inline style.",
+    );
+    assert.equal(messages.length, 1, "Unexpected screenshot CSP diagnostic.");
+    assert.match(messages[0], /Refused to apply a stylesheet/);
+  } else {
+    assert.deepEqual(probe.styles, []);
+    assert.deepEqual(probe.violations, []);
+    assert.deepEqual(messages, []);
+  }
+  screenshotPolicyChecks.push({ path, ...probe, console_messages: messages });
+}
 async function capture(p, name, width) {
   await p.setViewportSize({ width, height: 1000 });
   await p.evaluate(() => document.fonts.ready);
   await p.locator("#notice:empty").waitFor({ state: "attached" });
-  await p.screenshot({
-    path: `docs/evidence/${engine}-${name}-${width}.png`,
-    fullPage: true,
-  });
+  await verifiedScreenshot(p, `docs/evidence/${engine}-${name}-${width}.png`);
   const overflow = await p.evaluate(
     () => document.documentElement.scrollWidth > innerWidth,
   );
@@ -784,6 +851,7 @@ try {
         environment: `local Node/SQLite + ${engine}; synthetic identities only`,
         engine,
         github_live_browser: process.env.MIZVO_VERIFY_GITHUB === "1",
+        screenshot_policy_checks: screenshotPolicyChecks,
         checks,
         page_errors: errors,
         csp_errors: csp,
@@ -817,6 +885,11 @@ try {
   console.log(
     JSON.stringify({
       screenshots: checks.length,
+      expected_runner_style_rejections: screenshotPolicyChecks.reduce(
+        (n, c) => n + c.violations.length,
+        0,
+      ),
+      application_csp_errors: csp.length,
       axe_violations: 0,
       page_errors: errors.length,
       flows: "passed",
@@ -837,6 +910,7 @@ try {
         browser_connected: browser.isConnected(),
         owner_page_closed: page.isClosed(),
         completed_checks: checks,
+        screenshot_policy_checks: screenshotPolicyChecks,
         page_errors: errors,
         csp_errors: csp,
       },
