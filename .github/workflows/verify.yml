@@ -16,15 +16,6 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      # Temporary format diagnostic for PR #5. Remove after committing exact output.
-      - name: Report exact Prettier output for review
-        run: |
-          npx prettier --write apps/web/main.ts packages/domain/service.ts tests/browser.mjs tests/ownership-plan.test.ts
-          for file in apps/web/main.ts packages/domain/service.ts tests/browser.mjs tests/ownership-plan.test.ts; do
-            echo "MIZVO_FORMAT_BEGIN:$file"
-            base64 -w 80 "$file"
-            echo "MIZVO_FORMAT_END:$file"
-          done
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
