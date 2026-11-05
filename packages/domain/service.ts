@@ -220,7 +220,15 @@ export class Domain {
       `SELECT * FROM project_milestones WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY target_date IS NULL,target_date,created_at,id`,
       project,
     );
+    const brief_revisions = this.s.all(
+      "SELECT * FROM project_brief_revisions WHERE project_id=? ORDER BY revision DESC",
+      project,
+    );
+    const shared_brief = brief_revisions.find((r) => r.visibility === "client") ?? null;
+    const brief = client ? shared_brief : (brief_revisions[0] ?? null);
     const client_decisions = this.clientDecisions(user, project, client);
+    const next_client_decision =
+      client_decisions.find((r) => r.status === "pending" && r.current) ?? null;
     const releases: Row[] = this.s
       .all(
         `SELECT * FROM releases WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at DESC,id`,
@@ -278,7 +286,21 @@ export class Domain {
             updated_at,
           }),
         ),
+        brief: brief
+          ? {
+              id: brief.id,
+              revision: brief.revision,
+              problem: brief.problem,
+              audience: brief.audience,
+              outcome: brief.outcome,
+              success_criteria: brief.success_criteria,
+              exclusions: brief.exclusions,
+              assumptions: brief.assumptions,
+              created_at: brief.created_at,
+            }
+          : null,
         client_decisions,
+        next_client_decision,
         releases: releases.map(
           ({
             id,
@@ -315,7 +337,11 @@ export class Domain {
         ) ?? null,
       tasks,
       milestones,
+      brief,
+      shared_brief,
+      brief_revisions,
       client_decisions,
+      next_client_decision,
       releases,
       members: this.s.all(
         "SELECT m.role,m.user_id,m.expires_at,m.revoked_at,u.name,u.email FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.project_id=?",
@@ -332,6 +358,38 @@ export class Domain {
         ) ?? null,
     };
   }
+  briefRevision(user: string, project: string, b: Row) {
+    const access = owner(this.s, project, user);
+    assert(access.organization_id === this.organization, 404, "Project not found.");
+    const problem = text(b.problem, "Problem to solve", 3000),
+      audience = text(b.audience, "People affected", 2000),
+      outcome = text(b.outcome, "Desired outcome", 3000),
+      success = text(b.success_criteria, "How success will be checked", 3000),
+      exclusions = text(b.exclusions ?? "", "Outside scope", 3000, 0),
+      assumptions = text(b.assumptions ?? "", "Assumptions", 3000, 0),
+      visibility = choice(b.visibility ?? "internal", ["internal", "client"], "visibility"),
+      base = Number(b.base_revision);
+    assert(
+      Number.isSafeInteger(base) && base >= 0 && base <= 100000,
+      400,
+      "An exact current brief revision is required.",
+    );
+    return this.s.transaction(() => {
+      const latest = this.s.get(
+        "SELECT COALESCE(MAX(revision),0) AS revision FROM project_brief_revisions WHERE project_id=?",
+        project,
+      )!.revision;
+      assert(latest === base, 409, "Brief changed. Reload before saving another revision.");
+      const key = id(), revision = latest + 1, stamp = now();
+      this.s.run(
+        "INSERT INTO project_brief_revisions(id,project_id,revision,problem,audience,outcome,success_criteria,exclusions,assumptions,visibility,actor_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        key, project, revision, problem, audience, outcome, success, exclusions, assumptions,
+        visibility, user, stamp,
+      );
+      this.audit(project, user, "brief.revised", key);
+      return { id: key, revision };
+    });
+  }
   clientDecisions(user: string, project: string, client: boolean) {
     const grant = membership(this.s, project, user, !client);
     assert(
@@ -340,16 +398,24 @@ export class Domain {
       404,
       "Project not found.",
     );
-    if (client)
-      return this.s.all(
-        "SELECT d.id,d.title,d.body,d.status,d.version,d.created_at,d.updated_at,r.outcome,r.comment,r.created_at AS answered_at FROM client_decision_requests d LEFT JOIN client_decision_responses r ON r.request_id=d.id WHERE d.project_id=? AND d.client_id=? ORDER BY d.created_at DESC,d.id",
-        project,
-        user,
-      );
-    return this.s.all(
-      "SELECT d.*,u.name AS recipient,r.outcome,r.comment,r.created_at AS answered_at,r.request_version FROM client_decision_requests d JOIN users u ON u.id=d.client_id LEFT JOIN client_decision_responses r ON r.request_id=d.id WHERE d.project_id=? ORDER BY d.created_at DESC,d.id",
+    const shared = this.s.get(
+      "SELECT id FROM project_brief_revisions WHERE project_id=? AND visibility='client' ORDER BY revision DESC LIMIT 1",
       project,
-    );
+    )?.id;
+    const rows = client
+      ? this.s.all(
+          "SELECT d.id,d.title,d.body,d.status,d.version,d.brief_revision_id,d.release_id,br.revision AS brief_revision,d.created_at,d.updated_at,r.outcome,r.comment,r.created_at AS answered_at FROM client_decision_requests d LEFT JOIN project_brief_revisions br ON br.id=d.brief_revision_id LEFT JOIN client_decision_responses r ON r.request_id=d.id WHERE d.project_id=? AND d.client_id=? ORDER BY d.created_at DESC,d.id DESC",
+          project,
+          user,
+        )
+      : this.s.all(
+          "SELECT d.*,br.revision AS brief_revision,u.name AS recipient,r.outcome,r.comment,r.created_at AS answered_at,r.request_version FROM client_decision_requests d LEFT JOIN project_brief_revisions br ON br.id=d.brief_revision_id JOIN users u ON u.id=d.client_id LEFT JOIN client_decision_responses r ON r.request_id=d.id WHERE d.project_id=? ORDER BY d.created_at DESC,d.id DESC",
+          project,
+        );
+    return rows.map((r) => ({
+      ...r,
+      current: !r.brief_revision_id || r.brief_revision_id === shared,
+    }));
   }
   requestClientDecision(user: string, project: string, b: Row) {
     const grant = owner(this.s, project, user);
@@ -369,18 +435,36 @@ export class Domain {
         now(),
       );
       assert(active, 400, "Select a client with active project access.");
-      const request = id(),
-        stamp = now();
+      const briefId = b.brief_revision_id
+        ? text(b.brief_revision_id, "Brief revision", 100)
+        : null;
+      const releaseId = b.release_id
+        ? text(b.release_id, "Release version", 100)
+        : null;
+      if (briefId) {
+        const shared = this.s.get(
+          "SELECT id FROM project_brief_revisions WHERE project_id=? AND visibility='client' ORDER BY revision DESC LIMIT 1",
+          project,
+        );
+        assert(
+          shared?.id === briefId,
+          409,
+          "Select the current client-visible brief revision.",
+        );
+      }
+      if (releaseId)
+        assert(
+          this.s.get(
+            "SELECT id FROM releases WHERE id=? AND project_id=? AND visibility='client'",
+            releaseId, project,
+          ),
+          400,
+          "Only a shared release from this project can be reviewed.",
+        );
+      const request = id(), stamp = now();
       this.s.run(
-        "INSERT INTO client_decision_requests(id,project_id,client_id,actor_id,title,body,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-        request,
-        project,
-        recipient,
-        user,
-        title,
-        body,
-        stamp,
-        stamp,
+        "INSERT INTO client_decision_requests(id,project_id,client_id,actor_id,title,body,created_at,updated_at,brief_revision_id,release_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        request, project, recipient, user, title, body, stamp, stamp, briefId, releaseId,
       );
       this.audit(project, user, "client_decision.requested", request);
       return { id: request };
@@ -436,7 +520,7 @@ export class Domain {
       expected = version(b.version);
     this.s.transaction(() => {
       const r = this.s.get(
-        "SELECT version,status FROM client_decision_requests WHERE id=? AND project_id=? AND client_id=?",
+        "SELECT version,status,brief_revision_id FROM client_decision_requests WHERE id=? AND project_id=? AND client_id=?",
         request,
         project,
         user,
@@ -447,6 +531,17 @@ export class Domain {
         409,
         "This exact request has changed or already been answered.",
       );
+      if (r.brief_revision_id) {
+        const current = this.s.get(
+          "SELECT id FROM project_brief_revisions WHERE project_id=? AND visibility='client' ORDER BY revision DESC LIMIT 1",
+          project,
+        );
+        assert(
+          current?.id === r.brief_revision_id,
+          409,
+          "The shared brief was revised. Request a new decision for the current version.",
+        );
+      }
       const updated = this.s.run(
         "UPDATE client_decision_requests SET status='answered',version=version+1,updated_at=? WHERE id=? AND project_id=? AND client_id=? AND version=? AND status='pending'",
         now(),

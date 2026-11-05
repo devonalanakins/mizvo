@@ -510,6 +510,10 @@ export function application(
         send(res, 200, { ok: true });
         return;
       }
+      if (tail === "/brief-revisions" && method === "POST" && !client) {
+        send(res, 201, d.briefRevision(user, project, await body(req)));
+        return;
+      }
       const milestone = tail.match(/^\/milestones(?:\/([^/]+))?$/);
       if (milestone && !client) {
         if (!milestone[1] && method === "POST") {

@@ -362,6 +362,33 @@ try {
     .getByRole("heading", { name: "Founder milestone checkpoint" })
     .waitFor();
   await capture(client, "client-milestones", 390);
+  await page.goto(config.origin + `/studio/projects/${project}?tab=room`);
+  await page.getByRole("button", { name: "Create Living Brief" }).click();
+  await page.getByLabel("What problem are we solving?").fill(
+    "A confusing onboarding experience. <img src=x onerror=alert(1)>",
+  );
+  await page.getByLabel("Who needs it to work?").fill("First-time facilitators using a phone.");
+  await page.getByLabel("What outcome should it achieve?").fill(
+    "A facilitator can start a briefing confidently on a phone.",
+  );
+  await page.getByLabel("How will we know it works?").fill(
+    "Run a successful independent rehearsal.",
+  );
+  await page.getByLabel("What's outside this scope?").fill("Not a paid deployment or contract.");
+  await page.getByLabel("What assumptions need validation?").fill("Actual phone testing.");
+  await page.getByLabel("Share this revision with clients").selectOption("client");
+  await page.getByRole("button", { name: "Save new brief revision" }).click();
+  await page.getByRole("heading", {
+    name: "A facilitator can start a briefing confidently on a phone.",
+  }).waitFor();
+  await capture(page, "studio-living-brief", 1440);
+  await client.goto(config.origin + `/space/projects/${project}`);
+  await client.getByText("Your shared Living Brief").waitFor();
+  await client.getByRole("heading", {
+    name: "A facilitator can start a briefing confidently on a phone.",
+  }).waitFor();
+  assert.equal(await client.locator(".living-brief img").count(), 0);
+  await capture(client, "client-living-brief", 390);
   await page.goto(config.origin + `/studio/projects/${project}?tab=decisions`);
   await page.getByRole("button", { name: "Request client decision" }).click();
   await page
@@ -370,6 +397,7 @@ try {
   await page
     .getByLabel("What exactly needs their decision?")
     .fill("Is this explanation clear and useful?");
+  await page.getByLabel("Related recorded version").selectOption(rel.value.id);
   await page.getByRole("button", { name: "Request decision" }).click();
   await page
     .getByRole("heading", { name: "Approve the onboarding description" })
@@ -379,10 +407,16 @@ try {
     .getByRole("heading", { name: "Approve the onboarding description" })
     .waitFor();
   await capture(client, "client-decisions", 390);
-  await client.getByRole("button", { name: "Respond to request" }).click();
+  await client.goto(config.origin + `/space/projects/${project}`);
+  await client.getByText("One decision needs your input").waitFor();
+  await client.getByText("Recorded version: Verification version 1").waitFor();
+  await capture(client, "client-next-decision", 390);
+  await client.getByRole("button", { name: "Respond to this request" }).click();
   await client.getByLabel("Your decision").selectOption("accepted");
   await client.getByLabel("Response and context").fill("The benefit is clear.");
   await client.getByRole("button", { name: "Record response" }).click();
+  await client.getByText("Nothing needs your approval right now.").waitFor();
+  await client.goto(config.origin + `/space/projects/${project}?tab=decisions`);
   await client.getByText("The benefit is clear.").waitFor();
   await page.goto(config.origin + `/studio/projects/${project}?tab=releases`);
   await page

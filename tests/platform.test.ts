@@ -1623,6 +1623,7 @@ test("release-source migration upgrades an existing V0.5 database without changi
       assert(s.get("SELECT 1 FROM migrations WHERE version=3"));
       assert(s.get("SELECT 1 FROM migrations WHERE version=4"));
       assert(s.get("SELECT 1 FROM migrations WHERE version=5"));
+      assert(s.get("SELECT 1 FROM migrations WHERE version=6"));
     } finally {
       s.close();
     }
@@ -2459,6 +2460,199 @@ test("targeted client decisions keep request versions, recipient isolation and i
       ).status,
       404,
     );
+  } finally {
+    await f.stop();
+  }
+});
+
+test("Living Brief preserves private revisions, client-safe projection, exact preview decision and stale-response boundary", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email),
+      contributor = await f.login(f.users.contributor.email),
+      client = await f.login(f.users.client.email),
+      other = await f.login(f.users.other.email);
+    const project = (await f.request("/projects", "POST", {
+      name: "Human-first commission",
+      purpose: "Test one actual client decision.",
+    }, founder)).value.id;
+    const path = `/projects/${project}`;
+    const otherProject = (await f.request("/projects", "POST", {
+      name: "Separate commission",
+      purpose: "Keep each project isolated.",
+    }, founder)).value.id;
+    for (const [person, role, session] of [
+      [f.users.contributor, "contributor", contributor],
+      [f.users.client, "client", client],
+      [f.users.other, "client", other],
+    ] as const) {
+      const invite = await f.request(path + "/invitations", "POST", {
+        email: person.email, role,
+      }, founder);
+      assert.equal(invite.status, 201);
+      assert.equal((await f.request("/invitations/accept", "POST", {
+        token: invite.value.token,
+      }, session)).status, 200);
+    }
+    const initial = (await f.request("/space" + path, "GET", undefined, client)).value;
+    assert.equal(initial.brief, null);
+    assert.equal(initial.next_client_decision, null);
+    const briefBody = {
+      problem: "The current process confuses people.",
+      audience: "Nontechnical facilitators.",
+      outcome: "Start confidently on a phone.",
+      success_criteria: "Finish a real guided rehearsal.",
+      exclusions: "No payroll records.",
+      assumptions: "Needs live phone trial.",
+    };
+    assert.equal((await f.request(path + "/brief-revisions", "POST", {
+      ...briefBody, visibility: "client", base_revision: 0,
+    }, contributor)).status, 403);
+    assert.equal((await f.request(path + "/brief-revisions", "POST", {
+      ...briefBody, visibility: "client", base_revision: 0,
+    }, client)).status, 404);
+    assert.equal((await f.request("/space" + path + "/brief-revisions", "POST", {
+      ...briefBody, visibility: "client", base_revision: 0,
+    }, client)).status, 404);
+    assert.equal((await f.request("/projects/" + otherProject + "/brief-revisions", "POST", {
+      ...briefBody, visibility: "client", base_revision: 0,
+    }, client)).status, 404);
+    const privateRev = await f.request(path + "/brief-revisions", "POST", {
+      ...briefBody,
+      problem: "PRIVATE_INTERNAL_DISCOVERY",
+      assumptions: "PRIVATE_ASSUMPTION",
+      visibility: "internal",
+      base_revision: 0,
+    }, founder);
+    assert.equal(privateRev.status, 201);
+    const hidden = (await f.request("/space" + path, "GET", undefined, client)).value;
+    assert.equal(hidden.brief, null);
+    assert(!JSON.stringify(hidden).includes("PRIVATE_INTERNAL_DISCOVERY"));
+    assert(!JSON.stringify(hidden).includes("PRIVATE_ASSUMPTION"));
+    const shared = await f.request(path + "/brief-revisions", "POST", {
+      ...briefBody, visibility: "client", base_revision: 1,
+    }, founder);
+    assert.equal(shared.status, 201);
+    assert.equal(shared.value.revision, 2);
+    assert.equal((await f.request(path + "/brief-revisions", "POST", {
+      ...briefBody, visibility: "client", base_revision: 1,
+    }, founder)).status, 409);
+    let room = (await f.request(path, "GET", undefined, founder)).value;
+    assert.equal(room.brief_revisions.length, 2);
+    assert.equal(room.shared_brief.id, shared.value.id);
+    const currentClient = (await f.request("/space" + path, "GET", undefined, client)).value;
+    assert.equal(currentClient.brief.revision, 2);
+    assert.equal(currentClient.brief.problem, briefBody.problem);
+    assert(!JSON.stringify(currentClient).includes("PRIVATE_INTERNAL_DISCOVERY"));
+    assert(!JSON.stringify(currentClient).includes("PRIVATE_ASSUMPTION"));
+    assert(!JSON.stringify(currentClient.brief).includes("actor_id"));
+    assert(!JSON.stringify(currentClient.brief).includes("visibility"));
+    assert(!JSON.stringify(currentClient).includes("brief_revisions"));
+    assert.equal((await f.request("/space" + path, "GET", undefined, other)).value.brief.id, shared.value.id);
+    const release = await f.request(path + "/releases", "POST", {
+      label: "Phone rehearsal v1",
+      summary: "Recorded draft; not deployed.",
+      commit_sha: "a".repeat(40),
+      demo_url: "https://example.test/synthetic-preview",
+      visibility: "client",
+      rollback: "Restore earlier build.",
+    }, founder);
+    assert.equal(release.status, 201);
+    const internalRelease = await f.request(path + "/releases", "POST", {
+      label: "Internal only",
+      summary: "Not shared with client.",
+      commit_sha: "b".repeat(40),
+      visibility: "internal",
+      rollback: "Restore.",
+    }, founder);
+    assert.equal(internalRelease.status, 201);
+    const crossRelease = await f.request("/projects/" + otherProject + "/releases", "POST", {
+      label: "Another project",
+      summary: "Not the same customer.",
+      commit_sha: "c".repeat(40),
+      visibility: "client",
+      rollback: "Restore.",
+    }, founder);
+    assert.equal(crossRelease.status, 201);
+    for (const bad of [
+      { brief_revision_id: privateRev.value.id },
+      { brief_revision_id: "not-a-brief" },
+    ]) {
+      assert.equal((await f.request(path + "/client-decisions", "POST", {
+        client_id: f.users.client.id, title: "Wrong version", body: "Not current.", ...bad,
+      }, founder)).status, 409);
+    }
+    for (const badRelease of [internalRelease.value.id, crossRelease.value.id]) {
+      assert.equal((await f.request(path + "/client-decisions", "POST", {
+        client_id: f.users.client.id, title: "Wrong preview", body: "Not shared.",
+        brief_revision_id: shared.value.id, release_id: badRelease,
+      }, founder)).status, 400);
+    }
+    const request = await f.request(path + "/client-decisions", "POST", {
+      client_id: f.users.client.id,
+      title: "Does the phone flow work for you?",
+      body: "Review the recorded phone rehearsal for Living Brief revision 2.",
+      brief_revision_id: shared.value.id,
+      release_id: release.value.id,
+    }, founder);
+    assert.equal(request.status, 201);
+    let clientRoom = (await f.request("/space" + path, "GET", undefined, client)).value;
+    assert.equal(clientRoom.next_client_decision.id, request.value.id);
+    assert.equal(clientRoom.next_client_decision.release_id, release.value.id);
+    assert.equal(clientRoom.next_client_decision.brief_revision, 2);
+    assert.equal(clientRoom.next_client_decision.current, true);
+    assert.equal((await f.request("/space" + path, "GET", undefined, other)).value.next_client_decision, null);
+    const stillUnshared = await f.request(path + "/brief-revisions", "POST", {
+      ...briefBody, assumptions: "PRIVATE_ONLY_ASSUMPTION",
+      visibility: "internal", base_revision: 2,
+    }, founder);
+    assert.equal(stillUnshared.status, 201);
+    clientRoom = (await f.request("/space" + path, "GET", undefined, client)).value;
+    assert.equal(clientRoom.brief.revision, 2);
+    assert(clientRoom.next_client_decision);
+    assert(!JSON.stringify(clientRoom).includes("PRIVATE_ONLY_ASSUMPTION"));
+    const published = await f.request(path + "/brief-revisions", "POST", {
+      ...briefBody, outcome: "A new user-facing outcome.",
+      visibility: "client", base_revision: 3,
+    }, founder);
+    assert.equal(published.status, 201);
+    clientRoom = (await f.request("/space" + path, "GET", undefined, client)).value;
+    assert.equal(clientRoom.brief.revision, 4);
+    assert.equal(clientRoom.next_client_decision, null);
+    assert.equal(clientRoom.client_decisions[0].current, false);
+    const respond = "/space" + path + "/client-decisions/" + request.value.id + "/respond";
+    assert.equal((await f.request(respond, "POST", {
+      outcome: "accepted", comment: "Stale request should not pass.", version: 1,
+    }, client)).status, 409);
+    assert.equal((await f.request(respond, "POST", {
+      outcome: "accepted", comment: "Wrong client should not pass.", version: 1,
+    }, other)).status, 404);
+    const fresh = await f.request(path + "/client-decisions", "POST", {
+      client_id: f.users.client.id,
+      title: "Review the updated brief and phone flow",
+      body: "The latest shared brief revision and recorded demo are now ready for your review.",
+      brief_revision_id: published.value.id, release_id: release.value.id,
+    }, founder);
+    assert.equal(fresh.status, 201);
+    const freshAnswer = await f.request("/space" + path + "/client-decisions/" + fresh.value.id + "/respond", "POST", {
+      outcome: "changes_requested", comment: "Please enlarge one control.", version: 1,
+    }, client);
+    assert.equal(freshAnswer.status, 200);
+    assert.equal((await f.request("/space" + path + "/client-decisions/" + fresh.value.id + "/respond", "POST", {
+      outcome: "accepted", comment: "Replay.", version: 1,
+    }, client)).status, 409);
+    const reread = new Store(f.config.database);
+    try {
+      assert.equal(reread.get("SELECT COUNT(*) AS count FROM project_brief_revisions WHERE project_id=?", project)?.count, 4);
+      assert.equal(reread.get("SELECT revision FROM project_brief_revisions WHERE id=?", published.value.id)?.revision, 4);
+      assert.equal(reread.get("SELECT release_id FROM client_decision_requests WHERE id=?", fresh.value.id)?.release_id, release.value.id);
+      assert.equal(reread.get("SELECT outcome FROM client_decision_responses WHERE request_id=?", fresh.value.id)?.outcome, "changes_requested");
+    } finally {
+      reread.close();
+    }
+    const own = (await f.request(path, "GET", undefined, founder)).value;
+    assert.equal(own.brief.revision, 4);
+    assert.equal(own.brief_revisions.length, 4);
   } finally {
     await f.stop();
   }

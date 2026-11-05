@@ -8,7 +8,7 @@ Three related web surfaces share one maintainable TypeScript application and one
 
 - **Discover** (`/`): capabilities, process, truthful portfolio empty state, company information, consented inquiry and private intake.
 - **Studio** (`/studio`): persistent projects, Rooms, notes/discussion/design records, proposed decisions and history, tasks/dependencies/evidence, project invitations, People, search, notifications, Pipeline and delivery records.
-- **Client Space** (`/space`): an explicit client-only projection of shared project context, milestones, versioned demonstrations/deliverables, feedback, support requests and attributable version reviews.
+- **Client Space** (`/space`): an explicit client-only projection of shared project context, Living Brief, a single next client decision pinned to a shared brief revision and optionally a recorded demonstration version, milestones, feedback, support and attributable version reviews.
 
 The Workbench reads allowlisted GitHub repositories. It never executes code or writes to GitHub. A version record is not a deployment, and an approval is not a claim that a build passed tests.
 

@@ -340,6 +340,36 @@ function tasks() {
   });
   return `<div class="row between" data-layout="layout-2"><div><h2>Plan / Milestones</h2><p class="muted">Concrete checkpoints, linked work, and explicit review.</p></div><div class="row">${canEdit ? button(`${icon("plus")} Add milestone`, "new-milestone", "") : ""}${studio ? button(`${icon("plus")} Add task`, "new-task", "") : ""}</div></div>${milestones.length ? `<div class="grid">${cards.join("")}</div>` : empty("No milestone checkpoints yet.", "The project owner can create a dated checkpoint and choose what to share with clients.")}<div class="divider"></div><h2>Tasks</h2>${list.length ? list.map((t: Data) => `<article class="task"><span>${icon(t.status === "done" ? "check" : "plan")}</span><div class="task-copy"><h3>${e(t.title)}</h3><small>${e(t.milestone)} ${t.depends_on ? "· Has a dependency" : ""}</small><div class="row" data-layout="layout-3">${badge(t.status)}${t.priority === "high" ? badge("high") : ""}</div>${t.evidence ? `<p class="prose muted" data-layout="layout-4">${e(t.evidence)}</p>` : ""}</div>${studio ? button("Update", `edit-task:${t.id}`) : ""}</article>`).join("") : empty("A clear plan starts with one step.", "Tasks and evidence remain available throughout this project.")}`;
 }
+function briefPanel(client = false) {
+  const b = room!.brief, owner = !client && room!.role === "owner";
+  const heading = client ? "Your shared Living Brief" : "Living Brief";
+  if (!b)
+    return `<section class="card living-brief" aria-label="Living Brief"><div class="row between"><p class="eyebrow">${e(heading)}</p>${owner ? button("Create Living Brief", "new-brief", "") : ""}</div><h2>A project begins with a clear outcome.</h2><p class="muted">${client ? "The team has not yet shared a Living Brief. You can still review any separate project versions and ask for help." : "Capture the problem, people, success test, boundaries and assumptions in plain language."}</p></section>`;
+  const items = [
+    ["The problem", b.problem],
+    ["Who this helps", b.audience],
+    ["Desired outcome", b.outcome],
+    ["How we'll check success", b.success_criteria],
+    ["Outside scope", b.exclusions || "Not specified"],
+    ["Assumptions", b.assumptions || "Not specified"],
+  ];
+  return `<section class="card living-brief" aria-label="Living Brief"><div class="row between"><p class="eyebrow">${e(heading)}</p><span class="version">Revision ${e(b.revision)}</span></div><h2 class="brief-statement">${e(b.outcome)}</h2><div class="brief-grid">${items.map(([title, value]) => `<div class="brief-detail"><h3>${e(title)}</h3><p>${e(value)}</p></div>`).join("")}</div><div class="row between brief-footer"><small>Recorded ${date(b.created_at)}. Only shared revisions appear in Client Space.</small>${owner ? button("Update Living Brief", "new-brief", "") : ""}</div></section>`;
+}
+function proofSummary(client = false) {
+  const evidence = !client && room!.releases.some((r: Data) =>
+    (r.source_evidence ?? []).some((x: Data) => x.ci_state === "success")
+  );
+  return `<section class="proof-summary" aria-label="Delivery evidence"><p class="eyebrow">What is verified?</p><div class="proof-steps"><div><strong>Project need</strong><span>${room!.brief ? "Recorded brief" : "No shared brief yet"}</span></div><div><strong>Demo/version</strong><span>${room!.releases.length ? "A version is recorded; preview not verified" : "No version recorded"}</span></div><div><strong>Engineering evidence</strong><span>${evidence ? "GitHub CI observed; inspect in Studio" : client ? "Not independently verified in this view" : "No passing CI observation recorded"}</span></div><div><strong>Live deployment</strong><span>Not verified</span></div></div></section>`;
+}
+function nextClientDecision() {
+  const d = room!.next_client_decision,
+    release = d?.release_id
+      ? room!.releases.find((r: Data) => r.id === d.release_id)
+      : undefined;
+  if (!d)
+    return `<section class="card decision-focus" aria-label="Next decision"><p class="eyebrow">Your next decision</p><h2>Nothing needs your approval right now.</h2><p class="muted">When the team requests a review, the exact question and version will appear here. You can still submit feedback or request support.</p><a class="button secondary" href="${projectPath(route.project, "feedback")}">Share feedback ${icon("arrow")}</a></section>`;
+  return `<section class="card decision-focus" aria-label="Next decision"><p class="eyebrow">One decision needs your input</p><h2>${e(d.title)}</h2><p class="prose">${e(d.body)}</p><p class="muted">${d.brief_revision ? `Living Brief revision ${e(d.brief_revision)} · ` : ""}${release ? `Recorded version: ${e(release.label)}` : "No demonstration version linked"}</p>${release?.demo_url ? `<p><a class="button secondary" href="${e(release.demo_url)}" target="_blank" rel="noopener noreferrer">Open recorded demonstration ${icon("arrow")}</a></p><p class="muted">Link supplied by the project team; live environment and deployment are not independently verified.</p>` : ""}<div class="row">${button("Respond to this request", `respond-client-decision:${d.id}`, "")}<a class="button secondary" href="${projectPath(route.project, "decisions")}">All decisions</a></div></section>`;
+}
 function clientDecisionView() {
   const client = route.surface === "space",
     list = room!.client_decisions ?? [],
@@ -355,7 +385,7 @@ function clientDecisionView() {
   const cards = list
     .map(
       (d: Data) =>
-        `<article class="card"><div class="row between"><h3>${e(d.title)}</h3>${badge(d.status)}</div>${client ? "" : `<p class="muted">For ${e(d.recipient)}</p>`}<p class="prose">${e(d.body)}</p><small>Requested ${date(d.created_at)}</small>${d.outcome ? `<div class="review"><strong>${e(d.outcome.replaceAll("_", " "))}</strong><p class="prose">${e(d.comment)}</p><small>${date(d.answered_at)}</small></div>` : ""}${client && d.status === "pending" ? button("Respond to request", `respond-client-decision:${d.id}`, "") : ""}${!client && room!.role === "owner" && d.status === "pending" ? button("Cancel pending request", `cancel-client-decision:${d.id}`) : ""}</article>`,
+        `<article class="card"><div class="row between"><h3>${e(d.title)}</h3>${badge(d.status)}</div>${client ? "" : `<p class="muted">For ${e(d.recipient)}</p>`}<p class="prose">${e(d.body)}</p>${d.brief_revision ? `<p class="muted">Living Brief revision ${e(d.brief_revision)}</p>` : ""}${d.release_id ? `<p class="muted">Recorded version: ${e(room!.releases.find((r: Data) => r.id === d.release_id)?.label ?? "Unavailable")}</p>` : ""}<small>Requested ${date(d.created_at)}</small>${!d.current ? `<p class="notice">This request refers to an older shared brief. The team must issue a new request for the current revision.</p>` : ""}${d.outcome ? `<div class="review"><strong>${e(d.outcome.replaceAll("_", " "))}</strong><p class="prose">${e(d.comment)}</p><small>${date(d.answered_at)}</small></div>` : ""}${client && d.status === "pending" && d.current ? button("Respond to request", `respond-client-decision:${d.id}`, "") : ""}${!client && room!.role === "owner" && d.status === "pending" ? button("Cancel pending request", `cancel-client-decision:${d.id}`) : ""}</article>`,
     )
     .join("");
   return `<div class="row between" data-layout="layout-2"><div><h2>${client ? "Your decisions" : "Client decision requests"}</h2><p class="muted">Responses belong to a named client and an exact request. They never approve engineering releases or create contracts.</p></div>${canRequest ? button("Request client decision", "new-client-decision", "") : ""}</div>${!client && room!.role === "owner" && !eligible.length ? `<p class="muted">Invite a client and confirm their project access before requesting a decision.</p>` : ""}<div class="stack">${list.length ? cards : empty("No client decisions yet.", client ? "A requested decision will appear here when Mizvo asks for your response." : "A decision request creates a durable record for a specific client.")}</div>`;
@@ -394,7 +424,7 @@ function projectView() {
   else if (["code", "tests"].includes(tab) && !client) main = workbench();
   else if (client) {
     if (tab === "room")
-      main = `<section class="card"><p class="eyebrow">Your project with Mizvo</p><h2 class="space-intro">A clear view of what comes next.</h2><p class="muted">${e(room!.project.scope || room!.project.purpose)}</p><div class="status-track">${["discovery", "design", "engineering", "review", "delivered"].map((x) => `<span class="${room!.project.status === x ? "current" : ""}">${e(x === "engineering" ? "Build" : x[0]!.toUpperCase() + x.slice(1))}</span>`).join("")}</div><a class="button secondary" href="${projectPath(route.project, "releases")}">Review shared versions ${icon("arrow")}</a></section><div data-layout="layout-7"></div>${recordFeed(room!.records, true)}`;
+      main = `${nextClientDecision()}${briefPanel(true)}${proofSummary(true)}<div class="divider"></div>${recordFeed(room!.records, true)}`;
     else {
       const kind = tab === "support" ? "support" : "feedback";
       main = composer(true, kind) + recordFeed(room!.records, true);
@@ -404,7 +434,7 @@ function projectView() {
     const records = room!.records.filter(
       (r: Data) => !filter || r.kind === filter,
     );
-    main = `<div class="room-toolbar"><h2>${filter ? (filter === "note" ? "Project notes" : "Design context") : "Project conversation"}</h2><button class="quiet" data-action="inspector" aria-controls="context" aria-expanded="${innerWidth > 1200 ? !inspectorCollapsed : inspector}">Project context ${icon("menu")}</button></div>${recordFeed(records, false, empty(filter ? "Capture lasting project context." : "Welcome to your project Room.", "Write a note, share an update, or propose a decision. Saved records stay with this project."))}<div data-layout="layout-8"></div>${composer(false, filter || "discussion")}`;
+    main = `${tab === "room" ? briefPanel() + proofSummary() : ""}<div class="room-toolbar"><h2>${filter ? (filter === "note" ? "Project notes" : "Design context") : "Project conversation"}</h2><button class="quiet" data-action="inspector" aria-controls="context" aria-expanded="${innerWidth > 1200 ? !inspectorCollapsed : inspector}">Project context ${icon("menu")}</button></div>${recordFeed(records, false, empty(filter ? "Capture lasting project context." : "Welcome to your project Room.", "Write a note, share an update, or propose a decision. Saved records stay with this project."))}<div data-layout="layout-8"></div>${composer(false, filter || "discussion")}`;
   }
   return (
     projectHeader() +
@@ -581,6 +611,21 @@ async function people(project: string) {
     `${data.members.map((m: Data) => `<div class="people-row">${avatar(m.name)}<div class="person"><h3>${e(m.name)}</h3><small>${e(m.email)}${m.expires_at ? ` · access until ${date(m.expires_at)}` : ""}</small><div>${badge(m.revoked_at ? "revoked" : m.role)}</div></div>${data.role === "owner" && m.role !== "owner" && !m.revoked_at ? button("Revoke", `revoke-member:${project}:${m.user_id}`, "danger") + button(m.role === "client" ? "Make contributor" : "Make client", `role-member:${project}:${m.user_id}:${m.role === "client" ? "contributor" : "client"}`) : ""}</div>`).join("")}${pending.map((i: Data) => `<div class="people-row"><div class="person"><strong>${e(i.email)}</strong><br><small>${e(i.role)} · ${i.revoked_at ? "Revoked" : i.accepted_at ? "Accepted" : new Date(i.expires_at) < new Date() ? "Expired" : "Pending"} · expires ${date(i.expires_at)}</small></div>${!i.accepted_at && !i.revoked_at ? button("Revoke", `revoke-invite:${project}:${i.id}`, "danger") : ""}</div>`).join("")}${data.role === "owner" ? button("Create project invitation", `invite:${project}`, "") : ""}`,
   );
 }
+function livingBriefForm() {
+  const b = room!.brief;
+  return form(
+    "brief-revision",
+    textarea("What problem are we solving?", "problem", b?.problem ?? "") +
+      textarea("Who needs it to work?", "audience", b?.audience ?? "") +
+      textarea("What outcome should it achieve?", "outcome", b?.outcome ?? "") +
+      textarea("How will we know it works?", "success_criteria", b?.success_criteria ?? "") +
+      textarea("What's outside this scope?", "exclusions", b?.exclusions ?? "", false) +
+      textarea("What assumptions need validation?", "assumptions", b?.assumptions ?? "", false) +
+      select("Share this revision with clients", "visibility", ["internal", "client"], b?.visibility ?? "internal") +
+      `<input type="hidden" name="base_revision" value="${e(b?.revision ?? 0)}"><p class="notice">Saving creates an immutable revision. Sharing a newer revision makes outstanding decisions tied to an older shared revision outdated; clients must be asked to review the new version.</p>`,
+    "Save new brief revision",
+  );
+}
 function clientDecisionForm() {
   const active = room!.members.filter(
     (m: Data) =>
@@ -588,12 +633,16 @@ function clientDecisionForm() {
       !m.revoked_at &&
       (!m.expires_at || new Date(m.expires_at) > new Date()),
   );
+  const shared = room!.shared_brief,
+    versions = room!.releases.filter((r: Data) => r.visibility === "client");
   return form(
     "client-decision",
     `<label class="field">Client<select name="client_id" required>${active.map((m: Data) => `<option value="${e(m.user_id)}">${e(m.name)}</option>`).join("")}</select></label>` +
       field("Decision title", "title") +
       textarea("What exactly needs their decision?", "body") +
-      `<p class="notice">This request is addressed only to the selected project client. It does not make a legal promise or approve an engineering release.</p>`,
+      (shared ? `<input type="hidden" name="brief_revision_id" value="${e(shared.id)}"><p class="muted">Reviewing shared Living Brief revision ${e(shared.revision)}.</p>` : `<p class="muted">No shared Living Brief yet; this request is not tied to a brief revision.</p>`) +
+      `<label class="field">Related recorded version<select name="release_id"><option value="">No version linked</option>${versions.map((r: Data) => `<option value="${e(r.id)}">${e(r.label)}</option>`).join("")}</select></label>` +
+      `<p class="notice">This exact request and its version are recorded for one client. Recorded preview links and CI observations are not proof of production deployment. No legal signature or engineering release approval is created.</p>`,
     "Request decision",
   );
 }
@@ -856,6 +905,9 @@ async function action(value: string) {
       }
       break;
     }
+    case "new-brief":
+      modal("Create a Living Brief revision", livingBriefForm());
+      break;
     case "new-client-decision":
       modal("Request a client decision", clientDecisionForm());
       break;
@@ -1217,6 +1269,9 @@ async function submit(f: HTMLFormElement) {
         ...data,
         version: room!.project.version,
       });
+      break;
+    case "brief-revision":
+      await api(`/projects/${route.project}/brief-revisions`, "POST", data);
       break;
     case "client-decision":
       await api(`/projects/${route.project}/client-decisions`, "POST", data);

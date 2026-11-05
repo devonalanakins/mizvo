@@ -1457,3 +1457,128 @@ pre {
 [data-layout="layout-9"] {
   margin-bottom: 12px;
 }
+
+/* Living Commission: real project context, not an invented completion score. */
+.living-brief {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 22px;
+  border-color: #705c49;
+  background:
+    radial-gradient(ellipse at 99% 0%, #4a352a78, transparent 48%),
+    linear-gradient(145deg, #222328, #12171b 70%);
+}
+.living-brief::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto auto;
+  width: min(32%, 170px);
+  height: 105px;
+  border: 1px solid #946c4d66;
+  border-width: 0 0 1px 1px;
+  border-radius: 0 0 0 100%;
+  pointer-events: none;
+}
+.living-brief .eyebrow,
+.decision-focus .eyebrow {
+  margin: 0 0 8px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.brief-statement {
+  max-width: 780px;
+  font: 400 clamp(27px, 3.2vw, 43px)/1.16 Editorial, Georgia, serif;
+  color: var(--ink);
+  margin: 5px 0 24px;
+  overflow-wrap: anywhere;
+}
+.brief-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+.brief-detail {
+  padding: 14px 15px;
+  min-width: 0;
+  border: 1px solid #514b43;
+  border-radius: 10px;
+  background: #14191dd9;
+}
+.brief-detail h3 {
+  margin: 0 0 8px;
+  color: var(--copper);
+  font: 600 12px/1.35 Inter, sans-serif;
+}
+.brief-detail p {
+  margin: 0;
+  color: #e6e1dc;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.brief-footer {
+  margin-top: 22px;
+  border-top: 1px solid #5b5147;
+  padding-top: 16px;
+}
+.decision-focus {
+  margin-bottom: 22px;
+  border-color: #866546;
+  background: linear-gradient(125deg, #33251d, #191b1f 62%);
+}
+.decision-focus h2 {
+  margin: 3px 0 13px;
+  font: 400 clamp(27px, 3vw, 39px)/1.12 Editorial, Georgia, serif;
+  overflow-wrap: anywhere;
+}
+.decision-focus .prose {
+  max-width: 70ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.proof-summary {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 19px 21px;
+  margin-bottom: 22px;
+  background: #101519;
+}
+.proof-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.proof-steps > div {
+  border-left: 2px solid #705541;
+  padding-left: 12px;
+  min-width: 0;
+}
+.proof-steps strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+.proof-steps span {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 850px) {
+  .proof-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 540px) {
+  .brief-grid,
+  .proof-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .living-brief,
+  .decision-focus {
+    padding: 18px 16px;
+  }
+  .brief-statement {
+    font-size: 31px;
+  }
+}
