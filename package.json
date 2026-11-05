@@ -1,0 +1,42 @@
+{
+  "name": "mizvo-platform",
+  "version": "0.16.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "scripts": {
+    "dev": "node --experimental-strip-types apps/api/server.ts",
+    "build": "tsc && node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
+    "test:browser": "node tests/browser.mjs",
+    "check": "npm run typecheck && npm test && npm run build",
+    "account": "node --experimental-strip-types scripts/account.ts",
+    "lint": "prettier --check apps packages scripts tests package.json tsconfig.json .github",
+    "format": "prettier --write apps packages scripts tests package.json tsconfig.json .github",
+    "backup": "node scripts/backup.ts",
+    "recovery:drill": "node scripts/recovery-drill.ts",
+    "verify:github": "node scripts/verify-github.ts",
+    "test:distribution": "node scripts/verify-distribution.mjs",
+    "test:staging": "node scripts/staging-rehearsal.mjs",
+    "test:tls": "node scripts/https-staging-rehearsal.mjs",
+    "test:container": "bash scripts/test-container.sh",
+    "verify:all": "node scripts/verify-all.mjs",
+    "artifact:create": "node scripts/artifact-proof.mjs create dist build-proof.json",
+    "artifact:verify": "node scripts/artifact-proof.mjs verify dist build-proof.json",
+    "test:installation": "node scripts/installation-rehearsal.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
+    "@fontsource/cormorant-garamond": "5.2.8",
+    "@fontsource/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8",
+    "@types/node": "24.10.1",
+    "playwright": "1.57.0",
+    "prettier": "3.6.2",
+    "typescript": "5.9.3"
+  }
+}

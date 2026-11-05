@@ -1,0 +1,82 @@
+{
+  "started_at": "2026-11-05T03:17:14.374Z",
+  "finished_at": "2026-11-05T03:18:56.899Z",
+  "runtime": "v24.22.1",
+  "platform": "linux",
+  "architecture": "x64",
+  "scope": "local review build; no remote CI or production deployment claimed",
+  "live_public_github": true,
+  "results": [
+    {
+      "command": "npm ci --ignore-scripts",
+      "exit_code": 0,
+      "duration_ms": 917
+    },
+    {
+      "command": "npm run lint",
+      "exit_code": 0,
+      "duration_ms": 1235
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "duration_ms": 1541
+    },
+    {
+      "command": "npm test",
+      "exit_code": 0,
+      "duration_ms": 36512
+    },
+    {
+      "command": "npm run build",
+      "exit_code": 0,
+      "duration_ms": 1862
+    },
+    {
+      "command": "npm run test:distribution",
+      "exit_code": 0,
+      "duration_ms": 1341
+    },
+    {
+      "command": "npm run test:browser",
+      "exit_code": 0,
+      "duration_ms": 49152
+    },
+    {
+      "command": "npm run verify:github",
+      "exit_code": 0,
+      "duration_ms": 5362
+    },
+    {
+      "command": "npm audit --json",
+      "exit_code": 0,
+      "duration_ms": 4588
+    }
+  ],
+  "source_files_sha256": {
+    "apps/api/github.ts": "189d4dc5723b1a7889c3acbbf4d419ef8d2d9b0dbf1fc78b7ef31e98fc2e4a13",
+    "apps/api/server.ts": "fb2738edc20c086f478cc06168ba4b420d2aa3242955b6ba3941d8af5b41826c",
+    "apps/web/index.html": "5172796b203077620eec693a1e79b3614d90f7eb888ef73841a4bba5c0a7244b",
+    "apps/web/main.ts": "3a711701e68f396f4dc7b0134d9a93adec2f5474f15359e41ed12b479418fa82",
+    "packages/authz/security.ts": "b59b03937769893aeda3b68418a4047ae867a26ed492a39a365eaac4da6ca40a",
+    "packages/domain/service.ts": "de79bef2d3294146465975220d9ddfd333c581ace1306a614e56a4d28fd6bf43",
+    "packages/storage/001-foundation.sql": "de32a308b07d8f5b3607eb0595c49cd9f50c842981205c081872dbf73bda2654",
+    "packages/storage/002-release-source-evidence.sql": "bcd17d682a5e2f9ad0de945db94fc6814c9e1d70170c020e7e2f14024f0a1df7",
+    "packages/storage/003-record-pagination-indexes.sql": "8e54058f4f0d41ea10ede732b490405cb7d67cb1cb0b8028f1acb15b195876f7",
+    "packages/storage/database.ts": "e62116bba12ab90531c261dc79e3756401a25a1f42b9925462ac9dfb3137dfee",
+    "packages/ui/architecture.svg": "b64631dc7507cb6c77306383eee578206f0035659fcaaa0b90fa076e81fbc1ec",
+    "packages/ui/theme.css": "d8bcb3da91546d30379bfb3bbc7b4af499eeaff4de9cd1396f6d019c6cf96843",
+    "scripts/account.ts": "c2aff2c300ef88d3b6a0fc14bcdd5d2bd80b7dc1b2173c06d6f99d36291fc540",
+    "scripts/backup.ts": "d6296c5080acab94cdd47a8dbbc69162ca77f97d32bcd080d15e41fcd110e419",
+    "scripts/build.mjs": "d73af0bb01f9f3659ceedfd9179716ba63dd11eeb7a57c9fcf0ec14c5683f168",
+    "scripts/verify-all.mjs": "f9ab783fe37e6fe0e4ff64abcf768ea510747b3cfd91a463a8985bd30cf13751",
+    "scripts/verify-distribution.mjs": "5421153faff4f66f4abb0fd67083687e748a8ebca594f0158fa524964b509dd0",
+    "scripts/verify-github.ts": "30bf085d4f92117efbc43d3e0464b96d151f46f73abb4725b5c531e3a7d5d6a3",
+    "tests/browser.mjs": "c0211693ebbfd3fbe520b6be1ee1a976e358e5d6704e35dddd9f0f8920fba575",
+    "tests/platform.test.ts": "0b78a948b9486e1db1587810f33dad13b62a60bcb908a6ad1e999b24f7811358",
+    ".github/workflows/verify.yml": "2c928a851108233bae79b0161ff54d08868e61f223aae0c8bb94f493c8032276",
+    "package.json": "4b6f466bb3e6c1d0024733f564107d188a3d6e3784ac86cd25ef11cc3865347a",
+    "package-lock.json": "9e932839759bcf0b4d21c22af364cb6d78798d3c92f108d811cfdcbe2c374565",
+    "tsconfig.json": "dedd4aa6102dd9d97b0c639bc75b1c76643275dfb58744c4db6a1e59bacc9a27"
+  }
+}
