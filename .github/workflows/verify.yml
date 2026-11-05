@@ -16,6 +16,13 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Temporary formatter receipt; remove after committing the exact formatted source.
+      - name: Capture formatted synthetic stage source
+        run: |
+          npx prettier --write scripts/staging-rehearsal.mjs
+          echo MIZVO_STAGE_FORMAT_BEGIN
+          base64 -w 80 scripts/staging-rehearsal.mjs
+          echo MIZVO_STAGE_FORMAT_END
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
