@@ -19,6 +19,10 @@ Create a database backup before upgrading. Deploy into a versioned release direc
 
 Post-release checks must use the intended HTTPS endpoint and two independently authenticated authorized accounts: create/read/edit/reload, invitation acceptance, wrong-project/client denies, revocation of an active grant, public inquiry visibility, client feedback and version review, source evidence and relevant notifications. Confirm `/api/health`, build mapping, secure cookies, logs and storage after process restart. Only then label that exact version LIVE.
 
+## V0.17 task migration safety
+
+Migration 010 adds optional task assignees and ISO calendar due dates. Existing rows retain their task IDs, versions, evidence and visibility; their new columns default to null. Assignees must be active internal project members at mutation time; client projections omit assignee identities and dates. An expired assignment is hidden from current Studio output and cleared on a later task edit. Downgrading a migration-010 database in place is not supported: take an integrity-checked backup before upgrading, and if rollback is required, restore the matching earlier source and pre-upgrade snapshot to a separate protected volume. This source is a draft, not a production upgrade approval.
+
 ## Backup
 
 ```sh
