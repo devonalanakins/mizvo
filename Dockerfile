@@ -1,6 +1,6 @@
 # Portable, self-hostable Node/SQLite staging image. No production network endpoint.
 # Pin the resolved image digest for a real, approved customer release.
-FROM node:24-bookworm-slim AS build
+FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
@@ -10,12 +10,13 @@ COPY packages/ ./packages/
 COPY scripts/ ./scripts/
 RUN npm run build
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS runtime
 # Operator-supplied labels identify build inputs; they are not signatures.
 ARG MIZVO_SOURCE_COMMIT=unverified
 ARG MIZVO_SOURCE_TREE=unverified
 LABEL org.opencontainers.image.source="https://github.com/devonalanakins/mizvo" \
       org.opencontainers.image.revision="${MIZVO_SOURCE_COMMIT}" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
       com.mizvo.checkout-tree="${MIZVO_SOURCE_TREE}"
 ENV NODE_ENV=production \
     PORT=4173 \

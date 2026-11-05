@@ -4,7 +4,7 @@
 
 ## What is packaged
 
-`Dockerfile` builds the same licensed AGPL-3.0-only Node/SQLite distribution as the repository's normal build. The final runtime image contains `dist/`, its license/notices, and Node 24; it includes **no** installed npm dependencies, repository source secrets, CI evidence, or customer files. A deliberately restricted `.dockerignore` makes the input explicit. Both stages use the maintained Node 24 Debian slim image line. Before a real customer deployment, independently review the resolved immutable image digest and runtime patch level.
+`Dockerfile` builds the same licensed AGPL-3.0-only Node/SQLite distribution as the repository's normal build. The final runtime image contains `dist/`, its license/notices, and Node 24; it includes **no** installed npm dependencies, repository source secrets, CI evidence, or customer files. A deliberately restricted `.dockerignore` makes the input explicit. Both stages use the **same immutable multi-architecture Node 24 Debian slim index digest**, pinned and reviewed in [OCI image provenance](OCI-IMAGE-PROOF.md). A pin prevents silent upstream image drift but must be deliberately refreshed for security updates. Before a real customer deployment, independently review the resolved immutable image digest and runtime patch level.
 
 The runtime executes as the unprivileged `node` user (UID 1000). SQLite lives at `/var/lib/mizvo/mizvo.sqlite`, with that directory prepared as owner-private mode 0700. The image never includes a database or bootstrap credentials.
 

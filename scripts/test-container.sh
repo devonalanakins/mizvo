@@ -35,6 +35,15 @@ tree="$(git rev-parse 'HEAD^{tree}')"
   echo "FAIL: run build and artifact:create before container rehearsal" >&2
   exit 1
 }
+# Fail closed if either OCI stage uses a floating, mixed or malformed base.
+mapfile -t base_refs < <(awk '$1 == "FROM" {print $2}' Dockerfile)
+if [[ "${#base_refs[@]}" -ne 2 ||
+      "${base_refs[0]}" != "${base_refs[1]}" ||
+      ! "${base_refs[0]}" =~ ^node:24-bookworm-slim@sha256:[a-f0-9]{64}$ ]]; then
+  echo "FAIL: both OCI stages must use the same immutable Node 24 index" >&2
+  exit 1
+fi
+base_ref="${base_refs[0]}"
 manifest_sha="$(sha256sum build-proof.json | cut -d ' ' -f 1)"
 docker build --file Dockerfile --tag "$image" \
   --build-arg "MIZVO_SOURCE_COMMIT=$commit" \
@@ -79,6 +88,7 @@ MIZVO_OCI_IMAGE_ID="$image_id" \
 MIZVO_OCI_COMMIT="$commit" \
 MIZVO_OCI_TREE="$tree" \
 MIZVO_OCI_MANIFEST="$manifest_sha" \
+MIZVO_OCI_BASE_REF="$base_ref" \
 node --input-type=module <<'JS'
 import { mkdir, writeFile } from "node:fs/promises";
 const path = "docs/evidence/oci-candidate-check.json";
@@ -90,6 +100,8 @@ await writeFile(path, JSON.stringify({
   checkout_commit: process.env.MIZVO_OCI_COMMIT,
   checkout_tree: process.env.MIZVO_OCI_TREE,
   manifest_sha256: process.env.MIZVO_OCI_MANIFEST,
+  pinned_base_index_reference: process.env.MIZVO_OCI_BASE_REF,
+  base_registry_signature_verified: false,
   entire_compiled_image_file_set_matches_ci_manifest: true,
   injected_unreviewed_file_rejected: true,
   image_source_labels_match_checkout: true,
