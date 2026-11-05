@@ -399,6 +399,7 @@ try {
   await capture(page, "delegated-plan", 390);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("link", { name: "People", exact: true }).click();
+  await page.getByRole("button", { name: "Manage Mizvo verification project" }).click();
   await capture(page, "people", 1440);
   await page.getByRole("button", { name: "Create project invitation" }).click();
   await page.getByLabel("Recipient email").fill("client@example.test");
