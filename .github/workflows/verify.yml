@@ -16,6 +16,8 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - run: npm run format
+      - run: git diff --color=never -- scripts/artifact-proof.mjs tests/artifact-proof.test.mjs package.json
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
