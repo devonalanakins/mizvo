@@ -15,6 +15,12 @@ cleanup() {
 trap cleanup EXIT
 
 docker build --file Dockerfile --tag "$image" .
+# Initial, read-only registry index inspection for choosing an immutable base.
+# Record the exact multi-arch digest, not a per-platform layer/image digest.
+echo "MIZVO_NODE_BASE_INDEX_BEGIN"
+docker buildx imagetools inspect docker.io/library/node:24-bookworm-slim | sed -n 's/^Digest:[[:space:]]*//p' | head -n 1
+echo "MIZVO_NODE_BASE_INDEX_END"
+
 MIZVO_ORIGIN=https://staging.example.invalid docker compose -f compose.staging.yaml config --quiet
 
 # A public container bind must fail closed for an untrusted address or
