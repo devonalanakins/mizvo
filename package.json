@@ -1,6 +1,6 @@
 {
   "name": "mizvo-platform",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "node --experimental-strip-types apps/api/server.ts",
+    "review:local": "node dist/scripts/review-local.js",
     "build": "tsc && node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
