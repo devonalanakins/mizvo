@@ -38,6 +38,22 @@ The server administrator first allowlists an exact repository. The project owner
 
 For private repositories, use a supported GitHub App installation credential or fine-grained read-only credential, scoped to the necessary repositories and read-only Contents, Pull Requests, Checks and Metadata permissions. Installation/token acquisition, rotation and permission verification remain deployment prerequisites. Public no-token access was actually tested; private credentials were not.
 
+## Private OCI staging option
+
+The repository also provides a rootless multi-stage `Dockerfile` and a
+`compose.staging.yaml` manifest. Its host port is **loopback-only**; there
+is no bundled public reverse proxy or automatic cloud deployment. The application
+still binds `127.0.0.1` by default for direct Node hosts; only explicitly
+configured production-mode containers with HTTPS origins may bind `0.0.0.0`
+inside their network namespace. CI now exercises the container's non-root
+identity, restricted filesystem, private port, fail-closed network binding
+and named-volume SQLite persistence across replacement.
+
+See [Container Staging](CONTAINER-STAGING.md) for its isolated setup,
+verification and operational limitations. This does not establish an approved
+public domain, externally trusted TLS, encrypted off-host backup, or client
+hosting arrangement.
+
 ## Cloudflare boundary
 
 The connected account had no Mizvo Worker or D1 database at inspection. No resources were created. This build’s `node:sqlite` adapter cannot run as D1. Select and verify a D1/Workers storage/runtime adapter before an edge release, or approve a dedicated Node origin with an appropriate Cloudflare configuration. Do not label this repository as Cloudflare-deployed.
