@@ -44,3 +44,9 @@ Private GitHub App permissions and rotation, GitHub write/reviewer-policy automa
 The meaningful user outcome is durable project context with explicit decisions and project-bounded collaboration. The worst immediate failure would be an authorization/projection error exposing another project or internal client data, which is why independent identities, object IDs, history paths, revocation, search and notification boundaries are challenged.
 
 Before releasing, the human reviewer should trace one client read and one decision write through the actual server and explain why the negative tests would fail if the corresponding guard were removed. Source publication/license approval enables a real implementation PR; production approval requires the separate runtime, identity and operational evidence in RELEASE.md.
+
+## Release-source verification increment
+
+The manual release-SHA finding is partially resolved by an explicit owner-triggered verification action. GitHub must resolve the exact commit and tree in the project's allowlisted repository. Immutable receipts capture actor, observation time and bounded complete check/status snapshots. No checks, pending/skipped checks and failures are never presented as passing. Provider errors save no receipt. Project ownership/expiry and repository binding are checked again after provider awaits; wrong-project release IDs and Client Space cannot invoke or read this engineering evidence. Evidence does not auto-approve a version.
+
+Remaining boundary: this verifies Git source and observes CI at a point in time. It does not attest that a downloadable artifact was produced from that source, that a URL is a verified preview, or that production was deployed. Explicit copy in Studio preserves that distinction. Migration 002 preserves existing release versions and attribution; incompatible rollback still requires the documented snapshot procedure.

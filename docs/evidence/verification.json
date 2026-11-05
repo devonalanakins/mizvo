@@ -1,61 +1,67 @@
 {
-  "started_at": "2026-11-05T02:38:53.533Z",
-  "finished_at": "2026-11-05T02:39:59.806Z",
+  "started_at": "2026-11-05T03:00:31.543Z",
+  "finished_at": "2026-11-05T03:02:06.934Z",
   "runtime": "v24.22.1",
   "platform": "linux",
   "architecture": "x64",
   "scope": "local review build; no remote CI or production deployment claimed",
-  "live_public_github": false,
+  "live_public_github": true,
   "results": [
     {
       "command": "npm ci --ignore-scripts",
       "exit_code": 0,
-      "duration_ms": 972
+      "duration_ms": 973
     },
     {
       "command": "npm run lint",
       "exit_code": 0,
-      "duration_ms": 1040
+      "duration_ms": 1213
     },
     {
       "command": "npm run typecheck",
       "exit_code": 0,
-      "duration_ms": 1308
+      "duration_ms": 1442
     },
     {
       "command": "npm test",
       "exit_code": 0,
-      "duration_ms": 28129
+      "duration_ms": 31971
     },
     {
       "command": "npm run build",
       "exit_code": 0,
-      "duration_ms": 1426
+      "duration_ms": 2254
     },
     {
       "command": "npm run test:distribution",
       "exit_code": 0,
-      "duration_ms": 1185
+      "duration_ms": 1329
     },
     {
       "command": "npm run test:browser",
       "exit_code": 0,
-      "duration_ms": 27707
+      "duration_ms": 47137
+    },
+    {
+      "command": "npm run verify:github",
+      "exit_code": 0,
+      "duration_ms": 5240
     },
     {
       "command": "npm audit --json",
       "exit_code": 0,
-      "duration_ms": 4494
+      "duration_ms": 3817
     }
   ],
   "source_files_sha256": {
-    "apps/api/github.ts": "14acc3285ec3d9181950e1bd456e430ee84156db5a41bf931ba2f31c12453770",
-    "apps/api/server.ts": "22b16152c9309b102babce22ce68ecaaf39bf85b7c82af574f02cd317d9b8638",
+    "apps/api/github.ts": "189d4dc5723b1a7889c3acbbf4d419ef8d2d9b0dbf1fc78b7ef31e98fc2e4a13",
+    "apps/api/server.ts": "68e420c18e338c13b2ea972b4c157a02b26c181c60991d6038c4a8740a5685d2",
     "apps/web/index.html": "5172796b203077620eec693a1e79b3614d90f7eb888ef73841a4bba5c0a7244b",
-    "apps/web/main.ts": "416f8255b78112292010412065dbfca65e052f766c04ae3aca49052bc3f45e1b",
+    "apps/web/main.ts": "0623de0b29ce51d7b1c20f2d5023b292e92a5d172ac146307d45df8f0ced4d3f",
     "packages/authz/security.ts": "b59b03937769893aeda3b68418a4047ae867a26ed492a39a365eaac4da6ca40a",
-    "packages/domain/service.ts": "a820aec4c1a16cf946fbf2f3adb4dad0d7027cf56c647e887ef74ff3761557a7",
+    "packages/domain/service.ts": "4639b8cca00004b4c9872d99edc597be369c9266481f18ccf34159e9a8485012",
     "packages/storage/001-foundation.sql": "de32a308b07d8f5b3607eb0595c49cd9f50c842981205c081872dbf73bda2654",
+    "packages/storage/002-release-source-evidence.sql": "bcd17d682a5e2f9ad0de945db94fc6814c9e1d70170c020e7e2f14024f0a1df7",
     "packages/storage/database.ts": "e62116bba12ab90531c261dc79e3756401a25a1f42b9925462ac9dfb3137dfee",
     "packages/ui/architecture.svg": "b64631dc7507cb6c77306383eee578206f0035659fcaaa0b90fa076e81fbc1ec",
     "packages/ui/theme.css": "d8bcb3da91546d30379bfb3bbc7b4af499eeaff4de9cd1396f6d019c6cf96843",
@@ -65,9 +71,9 @@
     "scripts/verify-all.mjs": "f9ab783fe37e6fe0e4ff64abcf768ea510747b3cfd91a463a8985bd30cf13751",
     "scripts/verify-distribution.mjs": "5421153faff4f66f4abb0fd67083687e748a8ebca594f0158fa524964b509dd0",
     "scripts/verify-github.ts": "30bf085d4f92117efbc43d3e0464b96d151f46f73abb4725b5c531e3a7d5d6a3",
-    "tests/browser.mjs": "4b08b0c220b973df4424280beb9a646bd79ab553ba4cb71bda1291ff7ac3b95b",
-    "tests/platform.test.ts": "50da12e0e87cbd66bf98ee828b3806bebeb13fa8d71915ce512c484d9cf94c92",
-    ".github/workflows/verify.yml": "b59e8383cfb629cbe8e8876238b945579dea1c142bda85eaab4ad6a7f2dc8ad1",
+    "tests/browser.mjs": "5941bb753595686c1ca6b37150819f9685c564dc630bb2b4736dd7f3c3b209b2",
+    "tests/platform.test.ts": "c48192a10767a3c01b06787b35dab4ebc7f302ca77fe9ba39f551390f32279f9",
+    ".github/workflows/verify.yml": "2c928a851108233bae79b0161ff54d08868e61f223aae0c8bb94f493c8032276",
     "package.json": "4b6f466bb3e6c1d0024733f564107d188a3d6e3784ac86cd25ef11cc3865347a",
     "package-lock.json": "9e932839759bcf0b4d21c22af364cb6d78798d3c92f108d811cfdcbe2c374565",
     "tsconfig.json": "dedd4aa6102dd9d97b0c639bc75b1c76643275dfb58744c4db6a1e59bacc9a27"

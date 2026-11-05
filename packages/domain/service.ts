@@ -117,6 +117,18 @@ export class Domain {
       )
       .map((r) => ({
         ...r,
+        source_evidence: client
+          ? undefined
+          : this.s
+              .all(
+                "SELECT id,repository,commit_sha,tree_sha,ci_state,actor_id,observed_at,checks_json FROM release_source_evidence WHERE release_id=? ORDER BY observed_at DESC,id",
+                r.id,
+              )
+              .map((row) => ({
+                ...row,
+                checks: JSON.parse(row.checks_json),
+                checks_json: undefined,
+              })),
         reviews: this.s.all(
           "SELECT rr.*,u.name AS actor FROM release_reviews rr JOIN users u ON u.id=rr.actor_id WHERE rr.release_id=?",
           r.id,
@@ -622,6 +634,48 @@ export class Domain {
       this.audit(project, user, "release.recorded", release);
     });
     return { id: release };
+  }
+  recordSourceEvidence(
+    user: string,
+    project: string,
+    release: string,
+    evidence: Row,
+  ) {
+    return this.s.transaction(() => {
+      owner(this.s, project, user);
+      const r = this.s.get(
+          "SELECT commit_sha FROM releases WHERE id=? AND project_id=?",
+          release,
+          project,
+        ),
+        repo = this.s.get(
+          "SELECT full_name FROM repositories WHERE project_id=?",
+          project,
+        );
+      assert(
+        r &&
+          repo &&
+          repo.full_name === evidence.repository &&
+          r.commit_sha === evidence.commit_sha,
+        409,
+        "The release or repository binding changed during verification.",
+      );
+      const receipt = id();
+      this.s.run(
+        "INSERT INTO release_source_evidence VALUES (?,?,?,?,?,?,?,?,?)",
+        receipt,
+        release,
+        evidence.repository,
+        evidence.commit_sha,
+        evidence.tree_sha,
+        evidence.ci_state,
+        JSON.stringify(evidence.checks),
+        user,
+        evidence.observed_at,
+      );
+      this.audit(project, user, "release.source_verified", receipt);
+      return receipt;
+    });
   }
   reviewRelease(user: string, project: string, release: string, b: Row) {
     const m = membership(this.s, project, user);

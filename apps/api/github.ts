@@ -66,6 +66,12 @@ export class GitHub {
         chunks.push(part.value);
       }
       return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(
+        502,
+        "GitHub evidence is unavailable. Try again later.",
+      );
     } finally {
       clearTimeout(timer);
     }
@@ -96,6 +102,80 @@ export class GitHub {
         head: x.head.sha,
         draft: x.draft,
       })),
+    };
+  }
+  async releaseSource(repo: string, sha: string) {
+    assert(/^[a-f0-9]{40}$/.test(sha), 400, "Use an exact commit SHA.");
+    const [commit, runs, status] = await Promise.all([
+      this.read(repo, `commits/${sha}`),
+      this.read(repo, `commits/${sha}/check-runs?per_page=100`),
+      this.read(repo, `commits/${sha}/status?per_page=100`),
+    ]);
+    assert(
+      commit?.sha === sha &&
+        /^[a-f0-9]{40}$/.test(commit.commit?.tree?.sha ?? ""),
+      502,
+      "GitHub did not return the requested commit and tree.",
+    );
+    assert(
+      Array.isArray(runs.check_runs) && Array.isArray(status.statuses),
+      502,
+      "GitHub returned invalid check evidence.",
+    );
+    assert(
+      Number.isInteger(runs.total_count) &&
+        runs.total_count >= 0 &&
+        runs.total_count <= 100 &&
+        runs.total_count === runs.check_runs.length &&
+        Number.isInteger(status.total_count) &&
+        status.total_count >= 0 &&
+        status.total_count <= 100 &&
+        status.total_count === status.statuses.length,
+      502,
+      "Too many checks to verify completely.",
+    );
+    const checks = [
+      ...runs.check_runs.map((c: any) => ({
+        name: String(c.name).slice(0, 200),
+        state:
+          c.status === "completed"
+            ? c.conclusion === "success"
+              ? "success"
+              : [
+                    "failure",
+                    "cancelled",
+                    "timed_out",
+                    "action_required",
+                    "startup_failure",
+                  ].includes(c.conclusion)
+                ? "failure"
+                : "pending"
+            : "pending",
+      })),
+      ...status.statuses.map((c: any) => ({
+        name: String(c.context).slice(0, 200),
+        state:
+          c.state === "success"
+            ? "success"
+            : ["failure", "error"].includes(c.state)
+              ? "failure"
+              : "pending",
+      })),
+    ];
+    const ci_state = !checks.length
+      ? "no_checks"
+      : checks.some((c) => c.state === "failure")
+        ? "failure"
+        : checks.some((c) => c.state === "pending")
+          ? "pending"
+          : "success";
+    return {
+      repository: repo,
+      commit_sha: sha,
+      tree_sha: commit.commit.tree.sha,
+      ci_state,
+      checks,
+      observed_at: new Date().toISOString(),
     };
   }
   async source(repo: string, path: string, ref: string) {

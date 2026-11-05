@@ -291,7 +291,10 @@ try {
   const rel = await api(page, `/projects/${project}/releases`, "POST", {
     label: "Verification version 1",
     summary: "A specific version for your review.",
-    commit_sha: "a".repeat(40),
+    commit_sha:
+      process.env.MIZVO_VERIFY_GITHUB === "1"
+        ? "b247d4e1c78af0057992ec2be9f68c13b755aaca"
+        : "a".repeat(40),
     rollback: "Return to the prior reviewed artifact.",
     visibility: "client",
     demo_url: "https://example.test/authorized-demo",
@@ -344,6 +347,24 @@ try {
     .getByRole("heading", { name: "Verify persistent project context" })
     .waitFor();
   await capture(page, "plan", 1440);
+  await page.goto(config.origin + `/studio/projects/${project}?tab=releases`);
+  await page
+    .getByRole("heading", { name: "Verification version 1", exact: true })
+    .waitFor();
+  if (process.env.MIZVO_VERIFY_GITHUB === "1") {
+    await page
+      .getByRole("button", { name: "Verify GitHub source", exact: true })
+      .click();
+    await page.getByText("GitHub source verified", { exact: true }).waitFor();
+  } else
+    await page
+      .getByText("Source SHA is recorded but not verified against GitHub.", {
+        exact: true,
+      })
+      .waitFor();
+  await capture(page, "release-evidence", 1440);
+  await capture(page, "release-evidence", 390);
+
   const revoke = await api(
     page,
     `/projects/${project}/members/` +

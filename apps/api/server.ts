@@ -37,10 +37,15 @@ export interface Config {
   githubRepositories?: string[];
   githubToken?: string;
 }
-export function application(config: Config) {
+export function application(
+  config: Config,
+  dependencies: { github?: GitHub } = {},
+) {
   const s = new Store(config.database),
     d = new Domain(s, config.organization),
-    github = new GitHub(config.githubRepositories ?? [], config.githubToken);
+    github =
+      dependencies.github ??
+      new GitHub(config.githubRepositories ?? [], config.githubToken);
   s.run(
     "INSERT OR IGNORE INTO organizations VALUES (?,?)",
     config.organization,
@@ -589,6 +594,38 @@ export function application(config: Config) {
       }
       if (tail === "/releases" && method === "POST" && !client) {
         send(res, 201, d.release(user, project, await body(req)));
+        return;
+      }
+      const verifySource = tail.match(/^\/releases\/([^/]+)\/verify-source$/);
+      if (verifySource && method === "POST" && !client) {
+        owner(s, project, user);
+        rate(s, `github:${user}`, 60, 60000);
+        const release = s.get(
+            "SELECT commit_sha FROM releases WHERE id=? AND project_id=?",
+            verifySource[1]!,
+            project,
+          ),
+          repo = s.get(
+            "SELECT full_name FROM repositories WHERE project_id=?",
+            project,
+          );
+        assert(release, 404, "Release not found.");
+        assert(
+          repo,
+          409,
+          "Connect an authorized repository before verifying source.",
+        );
+        const evidence = await github.releaseSource(
+          repo.full_name,
+          release.commit_sha,
+        );
+        const receipt = d.recordSourceEvidence(
+          user,
+          project,
+          verifySource[1]!,
+          evidence,
+        );
+        send(res, 201, { id: receipt, ...evidence });
         return;
       }
       const review = tail.match(/^\/releases\/([^/]+)\/review$/);

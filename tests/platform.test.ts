@@ -9,7 +9,7 @@ import { account } from "../packages/authz/security.ts";
 import { Store } from "../packages/storage/database.ts";
 import { GitHub } from "../apps/api/github.ts";
 const password = "Independent-Test-Password-2026";
-async function fixture() {
+async function fixture(github?: GitHub) {
   const dir = mkdtempSync(join(tmpdir(), "mizvo-"));
   const config: Config = {
     database: join(dir, "data.sqlite"),
@@ -17,7 +17,7 @@ async function fixture() {
     organization: "test-org",
     githubRepositories: ["devonalanakins/mizvo"],
   };
-  const app = application(config);
+  const app = application(config, { github });
   const users = {
     owner: account(
       app.s,
@@ -1215,7 +1215,7 @@ test("versioned migration upgrade preserves data; edited migrations and incompat
     );
     s.close();
     await writeFile(
-      join(migrations, "002-test-upgrade.sql"),
+      join(migrations, "099-test-upgrade.sql"),
       "ALTER TABLE organizations ADD COLUMN recovery_label TEXT NOT NULL DEFAULT 'preserved';",
     );
     s = new Store(database, migrations);
@@ -1227,7 +1227,7 @@ test("versioned migration upgrade preserves data; edited migrations and incompat
     assert.equal(s.all("SELECT * FROM migrations").length, 2);
     s.close();
     assert.throws(() => new Store(database), /does not support/);
-    await writeFile(join(migrations, "002-test-upgrade.sql"), "SELECT 1;");
+    await writeFile(join(migrations, "099-test-upgrade.sql"), "SELECT 1;");
     assert.throws(() => new Store(database, migrations), /checksum mismatch/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -1342,5 +1342,289 @@ test("client support requests have attributable team resolution and client reope
     );
   } finally {
     await f.stop();
+  }
+});
+test("release source receipts resolve exact GitHub objects and distinguish absent, pending and failed CI (mock transport)", async () => {
+  const sha = "a".repeat(40),
+    tree = "b".repeat(40);
+  let mode = "none";
+  const github = new GitHub(["example/repo"], undefined, (async (
+    input: any,
+  ) => {
+    const path = String(input);
+    if (mode === "network") throw new Error("network unavailable");
+    if (path.includes("check-runs"))
+      return new Response(
+        JSON.stringify({
+          total_count: mode === "overflow" ? 101 : mode === "none" ? 0 : 1,
+          check_runs:
+            mode === "none"
+              ? []
+              : [
+                  {
+                    name: "CI",
+                    status: mode === "pending" ? "in_progress" : "completed",
+                    conclusion:
+                      mode === "failure"
+                        ? "failure"
+                        : mode === "skipped"
+                          ? "skipped"
+                          : "success",
+                  },
+                ],
+        }),
+      );
+    if (path.endsWith("status?per_page=100"))
+      return new Response(JSON.stringify({ total_count: 0, statuses: [] }));
+    return new Response(
+      JSON.stringify({
+        sha: mode === "wrong" ? "c".repeat(40) : sha,
+        commit: { tree: { sha: tree } },
+      }),
+    );
+  }) as typeof fetch);
+  for (const [value, expected] of [
+    ["none", "no_checks"],
+    ["success", "success"],
+    ["failure", "failure"],
+    ["pending", "pending"],
+    ["skipped", "pending"],
+  ]) {
+    mode = value!;
+    const receipt = await github.releaseSource("example/repo", sha);
+    assert.equal(receipt.ci_state, expected);
+    assert.equal(receipt.tree_sha, tree);
+  }
+  for (const value of ["wrong", "overflow", "network"]) {
+    mode = value;
+    await assert.rejects(() => github.releaseSource("example/repo", sha));
+  }
+});
+test("release verification authorization, persistence, client isolation and reauthorization after provider awaits", async () => {
+  let onFetch: (() => void) | undefined;
+  let calls = 0;
+  let wrong = false;
+  const sha = "a".repeat(40),
+    tree = "b".repeat(40);
+  const github = new GitHub(["devonalanakins/mizvo"], undefined, (async (
+    input: any,
+  ) => {
+    calls++;
+    onFetch?.();
+    const path = String(input);
+    if (path.includes("check-runs"))
+      return new Response(JSON.stringify({ total_count: 0, check_runs: [] }));
+    if (path.endsWith("status?per_page=100"))
+      return new Response(JSON.stringify({ total_count: 0, statuses: [] }));
+    return new Response(
+      JSON.stringify({
+        sha: wrong ? "f".repeat(40) : sha,
+        commit: { tree: { sha: tree } },
+      }),
+    );
+  }) as typeof fetch);
+  const f = await fixture(github);
+  try {
+    const a = await f.login(f.users.owner.email),
+      b = await f.login(f.users.contributor.email),
+      c = await f.login(f.users.client.email);
+    const p = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Release evidence",
+          purpose: "Distinguish observed source from claims.",
+        },
+        a,
+      )
+    ).value.id;
+    for (const [user, role] of [
+      [f.users.contributor, "contributor"],
+      [f.users.client, "client"],
+    ] as const) {
+      const i = (
+        await f.request(
+          `/projects/${p}/invitations`,
+          "POST",
+          { email: user.email, role },
+          a,
+        )
+      ).value;
+      await f.request(
+        "/invitations/accept",
+        "POST",
+        { token: i.token },
+        role === "client" ? c : b,
+      );
+    }
+    const release = (
+      await f.request(
+        `/projects/${p}/releases`,
+        "POST",
+        {
+          label: "Source candidate",
+          summary: "Synthetic release record",
+          commit_sha: sha,
+          rollback: "Restore previous artifact.",
+          visibility: "client",
+        },
+        a,
+      )
+    ).value.id;
+    const path = `/projects/${p}/releases/${release}/verify-source`;
+    assert.equal((await f.request(path, "POST", {}, b)).status, 403);
+    assert.equal(calls, 0);
+    assert.equal((await f.request("/space" + path, "POST", {}, c)).status, 404);
+    assert.equal(calls, 0);
+    assert.equal((await f.request(path, "POST", {}, a)).status, 409);
+    assert.equal(calls, 0);
+    assert.equal(
+      (
+        await f.request(
+          `/projects/${p}/github`,
+          "PUT",
+          { repository: "devonalanakins/mizvo" },
+          a,
+        )
+      ).status,
+      200,
+    );
+    const other = (
+      await f.request(
+        "/projects",
+        "POST",
+        { name: "Other", purpose: "Keep release IDs scoped." },
+        a,
+      )
+    ).value.id;
+    assert.equal(
+      (
+        await f.request(
+          `/projects/${other}/releases/${release}/verify-source`,
+          "POST",
+          {},
+          a,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(calls, 0);
+    wrong = true;
+    assert.equal((await f.request(path, "POST", {}, a)).status, 502);
+    assert.equal(
+      f.app.s.get("SELECT COUNT(*) AS count FROM release_source_evidence")!
+        .count,
+      0,
+    );
+    wrong = false;
+    const result = await f.request(path, "POST", {}, a);
+    assert.equal(result.status, 201);
+    assert.match(result.value.id, /^[a-f0-9-]{36}$/);
+    assert.equal(result.value.ci_state, "no_checks");
+    assert.equal(result.value.tree_sha, tree);
+    let room = (await f.request(`/projects/${p}`, "GET", undefined, a)).value;
+    assert.equal(room.releases[0].source_evidence.length, 1);
+    assert.equal(room.releases[0].reviews.length, 0);
+    const visible = (
+      await f.request(`/space/projects/${p}`, "GET", undefined, c)
+    ).value;
+    assert(!JSON.stringify(visible).includes("source_evidence"));
+    assert(!JSON.stringify(visible).includes(tree));
+    const reopened = new Store(f.config.database);
+    assert.equal(
+      reopened.get("SELECT actor_id FROM release_source_evidence")?.actor_id,
+      f.users.owner.id,
+    );
+    reopened.close();
+    onFetch = () => {
+      f.app.s.run(
+        "UPDATE repositories SET full_name='different/repo' WHERE project_id=?",
+        p,
+      );
+    };
+    assert.equal((await f.request(path, "POST", {}, a)).status, 409);
+    assert.equal(
+      f.app.s.get("SELECT COUNT(*) AS count FROM release_source_evidence")!
+        .count,
+      1,
+    );
+    f.app.s.run(
+      "UPDATE repositories SET full_name='devonalanakins/mizvo' WHERE project_id=?",
+      p,
+    );
+    onFetch = () => {
+      f.app.s.run(
+        "UPDATE memberships SET revoked_at=? WHERE project_id=? AND user_id=?",
+        new Date().toISOString(),
+        p,
+        f.users.owner.id,
+      );
+    };
+    assert.equal((await f.request(path, "POST", {}, a)).status, 404);
+    assert.equal(
+      f.app.s.get("SELECT COUNT(*) AS count FROM release_source_evidence")!
+        .count,
+      1,
+    );
+  } finally {
+    await f.stop();
+  }
+});
+test("release-source migration upgrades an existing V0.5 database without changing recorded versions", async () => {
+  const { mkdir, copyFile } = await import("node:fs/promises");
+  const { Domain } = await import("../packages/domain/service.ts");
+  const dir = mkdtempSync(join(tmpdir(), "mizvo-release-upgrade-")),
+    migrations = join(dir, "old-migrations"),
+    database = join(dir, "data.sqlite");
+  await mkdir(migrations);
+  await copyFile(
+    "packages/storage/001-foundation.sql",
+    join(migrations, "001-foundation.sql"),
+  );
+  try {
+    let s = new Store(database, migrations);
+    s.run("INSERT INTO organizations VALUES ('upgrade','Mizvo')");
+    const user = account(
+        s,
+        "Migration Founder",
+        "upgrade@example.test",
+        password,
+        "upgrade",
+        "founder",
+      ),
+      domain = new Domain(s, "upgrade"),
+      p = domain.createProject(user.id, {
+        name: "Preserved",
+        purpose: "Preserve original release attribution.",
+      }),
+      release = domain.release(user.id, p.id, {
+        label: "Existing v1",
+        summary: "Already recorded before upgrade",
+        commit_sha: "a".repeat(40),
+        rollback: "Restore old build",
+      });
+    s.close();
+    s = new Store(database);
+    try {
+      assert.equal(
+        s.get("SELECT label FROM releases WHERE id=?", release.id)?.label,
+        "Existing v1",
+      );
+      assert.equal(
+        s.get("SELECT actor_id FROM releases WHERE id=?", release.id)?.actor_id,
+        user.id,
+      );
+      assert.equal(
+        s.get("SELECT COUNT(*) AS count FROM release_source_evidence")?.count,
+        0,
+      );
+      assert.equal(s.all("SELECT * FROM migrations").length, 2);
+    } finally {
+      s.close();
+    }
+    assert.throws(() => new Store(database, migrations), /does not support/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -49,3 +49,7 @@ The implementation does not complete every deep module in the full brief. STATUS
 ## Subsequent source-publication approval
 
 The founder approved publishing the reviewed implementation and locked AGPL as the standing source-license default. Package metadata and LICENSE now use AGPL-3.0-only. The previous private-build verification remains historical evidence; current-branch verification is rerun before publishing. Production deployment remains blocked by the documented independent gates.
+
+## Release-source verification increment
+
+The new release flow has provider-contract and HTTP authorization/race/isolation tests, an actual V0.5-to-migration-002 preservation test, and two additional release-screen captures (1440/390). Live public GitHub verification is exercised through the browser when MIZVO_VERIFY_GITHUB=1; ordinary CI keeps external GitHub calls out of deterministic browser tests. Complete latest command results and source hashes are in verification.json. Previous counts in the original V0.5 receipt remain historical.

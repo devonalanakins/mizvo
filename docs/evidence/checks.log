@@ -1,6 +1,6 @@
 $ npm ci --ignore-scripts
 
-added 12 packages in 875ms
+added 12 packages in 883ms
 npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 
 EXIT 0
@@ -30,28 +30,31 @@ $ npm test
 > mizvo-platform@0.5.0 test
 > node --experimental-strip-types --test tests/*.test.ts
 
-✔ real HTTP Room workflow survives restart; proposals, history, concurrency and authorization (2630.026409ms)
-✔ independent accounts: scoped invitation, expiry, replay, role changes and immediate revocation (2508.451562ms)
-✔ Client Space is a projection: no internal records, history, engineering, tasks or cross-client access (2529.921928ms)
-✔ task dependencies, completion evidence, version checks and immutable release reviews (2299.774457ms)
-✔ public inquiry validates consent, stays private, and connects to project lifecycle (2390.94468ms)
-✔ session controls and organization isolation are enforced by the server (2237.936154ms)
-✔ GitHub adapter contract: allowlist, exact endpoints, authentic upstream status and failures (mock transport) (2.184408ms)
-✔ backup CLI captures live WAL data and restored database preserves attribution and schema (1985.959318ms)
-✔ concurrent writes accept only one reviewed version; malformed versions are rejected (2101.038459ms)
-✔ password changes invalidate other sessions, reject wrong current password, and preserve current access (3851.216739ms)
-✔ grant expiry, cross-project object IDs, private notifications, and preference controls (2150.530444ms)
-✔ versioned migration upgrade preserves data; edited migrations and incompatible downgrades are refused (15.122083ms)
-✔ password verification preserves whitespace and uses explicit recorded work factors (928.850952ms)
-✔ client support requests have attributable team resolution and client reopening with version protection (2147.784818ms)
-ℹ tests 14
+✔ real HTTP Room workflow survives restart; proposals, history, concurrency and authorization (2828.982006ms)
+✔ independent accounts: scoped invitation, expiry, replay, role changes and immediate revocation (2592.542872ms)
+✔ Client Space is a projection: no internal records, history, engineering, tasks or cross-client access (2730.131304ms)
+✔ task dependencies, completion evidence, version checks and immutable release reviews (2204.389758ms)
+✔ public inquiry validates consent, stays private, and connects to project lifecycle (2271.563201ms)
+✔ session controls and organization isolation are enforced by the server (2262.722649ms)
+✔ GitHub adapter contract: allowlist, exact endpoints, authentic upstream status and failures (mock transport) (2.690759ms)
+✔ backup CLI captures live WAL data and restored database preserves attribution and schema (2075.759121ms)
+✔ concurrent writes accept only one reviewed version; malformed versions are rejected (1950.554445ms)
+✔ password changes invalidate other sessions, reject wrong current password, and preserve current access (3952.164062ms)
+✔ grant expiry, cross-project object IDs, private notifications, and preference controls (2266.968771ms)
+✔ versioned migration upgrade preserves data; edited migrations and incompatible downgrades are refused (12.582344ms)
+✔ password verification preserves whitespace and uses explicit recorded work factors (918.85239ms)
+✔ client support requests have attributable team resolution and client reopening with version protection (2407.979758ms)
+✔ release source receipts resolve exact GitHub objects and distinguish absent, pending and failed CI (mock transport) (1.892458ms)
+✔ release verification authorization, persistence, client isolation and reauthorization after provider awaits (2761.363546ms)
+✔ release-source migration upgrades an existing V0.5 database without changing recorded versions (362.529106ms)
+ℹ tests 17
 ℹ suites 0
-ℹ pass 14
+ℹ pass 17
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 27921.025807
+ℹ duration_ms 31750.048569
 npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 
 EXIT 0
@@ -81,7 +84,17 @@ $ npm run test:browser
 > mizvo-platform@0.5.0 test:browser
 > node tests/browser.mjs
 
-{"screenshots":22,"axe_violations":0,"page_errors":0,"flows":"passed"}
+{"screenshots":24,"axe_violations":0,"page_errors":0,"flows":"passed"}
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
+
+$ npm run verify:github
+
+> mizvo-platform@0.5.0 verify:github
+> node scripts/verify-github.ts
+
+Verified live public GitHub branches, commits, PRs, source, compare and check-runs endpoints.
 npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 
 EXIT 0

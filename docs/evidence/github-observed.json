@@ -1,7 +1,12 @@
 {
   "repository": "devonalanakins/mizvo",
-  "fetched_at": "2026-11-05T01:56:12.549Z",
+  "fetched_at": "2026-11-05T03:02:02.520Z",
   "branches": [
+    {
+      "name": "build/secure-platform-v0-5",
+      "sha": "39491ff230d4081c1c4360a1fe8009b2165c1a68",
+      "protected": false
+    },
     {
       "name": "design/solo-online-studio-v0-4",
       "sha": "8a3a6fa2eeabbb971044e7ad77f8c96439d9d670",
@@ -21,6 +26,13 @@
     }
   ],
   "pulls": [
+    {
+      "number": 2,
+      "title": "feat: secure persistent Mizvo platform foundation (AGPL-3.0)",
+      "url": "https://github.com/devonalanakins/mizvo/pull/2",
+      "head": "39491ff230d4081c1c4360a1fe8009b2165c1a68",
+      "draft": true
+    },
     {
       "number": 1,
       "title": "docs: synchronize Mizvo solo-first integrated Studio direction",
