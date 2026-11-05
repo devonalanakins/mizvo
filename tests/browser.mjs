@@ -61,8 +61,16 @@ function observe(page) {
   });
 }
 observe(page);
+async function visit(p, url) {
+  // A hard document replacement can cancel the preceding screen's real reads.
+  // WebKit reports some such cancellations as page errors. Exercise completed
+  // task boundaries in every engine; never filter errors to make a test pass.
+  await p.waitForLoadState("networkidle");
+  await p.goto(url);
+  await p.waitForLoadState("networkidle");
+}
 async function signIn(p, email, path = "/studio") {
-  await p.goto(config.origin + path);
+  await visit(p, config.origin + path);
   await p.getByLabel("Email", { exact: true }).fill(email);
   await p.getByLabel("Password", { exact: true }).fill(password);
   await p.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -116,13 +124,13 @@ async function capture(p, name, width) {
 }
 try {
   await mkdir("docs/evidence", { recursive: true });
-  await page.goto(config.origin + "/");
+  await visit(page, config.origin + "/");
   await page
     .getByRole("heading", { name: "Make the improbable useful." })
     .waitFor();
   for (const w of [320, 390, 768, 1024, 1440, 1920])
     await capture(page, "discover", w);
-  await page.goto(config.origin + "/inquiry");
+  await visit(page, config.origin + "/inquiry");
   await page.getByLabel("Your name").fill("Synthetic Browser Inquirer");
   await page.getByLabel("Email address").fill("browser@example.test");
   await page
@@ -342,7 +350,7 @@ try {
     demo_url: "https://preview.example.org/check",
   });
   assert.equal(rel.status, 201);
-  await engineer.goto(config.origin + `/studio/projects/${project}?tab=plan`);
+  await visit(engineer, config.origin + `/studio/projects/${project}?tab=plan`);
   await engineer.getByRole("button", { name: "Update", exact: true }).click();
   await engineer.getByLabel("Status").selectOption("review");
   await engineer
@@ -357,7 +365,8 @@ try {
       { exact: true },
     )
     .waitFor();
-  await engineer.goto(
+  await visit(
+    engineer,
     config.origin + `/studio/projects/${project}?tab=releases`,
   );
   await engineer
@@ -388,7 +397,7 @@ try {
     .locator("dialog")
     .getByRole("button", { name: "Accept invitation", exact: true })
     .click();
-  await client.goto(config.origin + `/space/projects/${project}`);
+  await visit(client, config.origin + `/space/projects/${project}`);
   await client
     .getByRole("heading", { name: "Mizvo verification project" })
     .waitFor();
@@ -452,7 +461,7 @@ try {
     .fill("Reviewed this exact synthetic version.");
   await client.getByRole("button", { name: "Record review" }).click();
   await client.getByText("Reviewed this exact synthetic version.").waitFor();
-  await page.goto(config.origin + `/studio/projects/${project}?tab=plan`);
+  await visit(page, config.origin + `/studio/projects/${project}?tab=plan`);
   await page
     .getByRole("heading", { name: "Verify persistent project context" })
     .waitFor();
@@ -471,12 +480,12 @@ try {
   await page
     .getByRole("heading", { name: "Founder milestone checkpoint" })
     .waitFor();
-  await client.goto(config.origin + `/space/projects/${project}?tab=plan`);
+  await visit(client, config.origin + `/space/projects/${project}?tab=plan`);
   await client
     .getByRole("heading", { name: "Founder milestone checkpoint" })
     .waitFor();
   await capture(client, "client-milestones", 390);
-  await page.goto(config.origin + `/studio/projects/${project}?tab=room`);
+  await visit(page, config.origin + `/studio/projects/${project}?tab=room`);
   await page.getByRole("button", { name: "Create Living Brief" }).click();
   await page
     .getByLabel("What problem are we solving?")
@@ -506,7 +515,7 @@ try {
     })
     .waitFor();
   await capture(page, "studio-living-brief", 1440);
-  await client.goto(config.origin + `/space/projects/${project}`);
+  await visit(client, config.origin + `/space/projects/${project}`);
   await client.getByText("Your shared Living Brief").waitFor();
   await client
     .getByRole("heading", {
@@ -515,7 +524,10 @@ try {
     .waitFor();
   assert.equal(await client.locator(".living-brief img").count(), 0);
   await capture(client, "client-living-brief", 390);
-  await page.goto(config.origin + `/studio/projects/${project}?tab=decisions`);
+  await visit(
+    page,
+    config.origin + `/studio/projects/${project}?tab=decisions`,
+  );
   await page.getByRole("button", { name: "Request client decision" }).click();
   await page
     .getByLabel("Decision title")
@@ -528,12 +540,15 @@ try {
   await page
     .getByRole("heading", { name: "Approve the onboarding description" })
     .waitFor();
-  await client.goto(config.origin + `/space/projects/${project}?tab=decisions`);
+  await visit(
+    client,
+    config.origin + `/space/projects/${project}?tab=decisions`,
+  );
   await client
     .getByRole("heading", { name: "Approve the onboarding description" })
     .waitFor();
   await capture(client, "client-decisions", 390);
-  await client.goto(config.origin + `/space/projects/${project}`);
+  await visit(client, config.origin + `/space/projects/${project}`);
   await client.getByText("One decision needs your input").waitFor();
   await client.getByText("Recorded version: Verification version 1").waitFor();
   await capture(client, "client-next-decision", 390);
@@ -542,9 +557,12 @@ try {
   await client.getByLabel("Response and context").fill("The benefit is clear.");
   await client.getByRole("button", { name: "Record response" }).click();
   await client.getByText("Nothing needs your approval right now.").waitFor();
-  await client.goto(config.origin + `/space/projects/${project}?tab=decisions`);
+  await visit(
+    client,
+    config.origin + `/space/projects/${project}?tab=decisions`,
+  );
   await client.getByText("The benefit is clear.").waitFor();
-  await page.goto(config.origin + `/studio/projects/${project}?tab=releases`);
+  await visit(page, config.origin + `/studio/projects/${project}?tab=releases`);
   await page
     .getByRole("heading", { name: "Verification version 1", exact: true })
     .waitFor();
@@ -569,7 +587,7 @@ try {
   await page.getByRole("link", { name: "Proofline", exact: true }).click();
   await page.getByText("Production deployment not verified").waitFor();
   await capture(page, "studio-proofline", 1440);
-  await client.goto(config.origin + `/space/projects/${project}?tab=proof`);
+  await visit(client, config.origin + `/space/projects/${project}?tab=proof`);
   await client.getByText("Responded to a read-only request").waitFor();
   await client.getByText("Production deployment not verified").waitFor();
   assert.equal(await client.getByText("Untrusted response header").count(), 0);
@@ -590,7 +608,7 @@ try {
     /not found|unavailable/,
   );
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(config.origin + `/studio/projects/${project}`);
+  await visit(page, config.origin + `/studio/projects/${project}`);
   await page
     .getByRole("button", { name: "Project context", exact: true })
     .click();
@@ -641,7 +659,7 @@ try {
       title: `History note ${i}`,
       body: "Synthetic history for page boundaries.",
     });
-  await page.goto(config.origin + `/studio/projects/${project}?tab=notes`);
+  await visit(page, config.origin + `/studio/projects/${project}?tab=notes`);
   await page
     .getByRole("button", { name: "Load older records", exact: true })
     .waitFor();
@@ -677,7 +695,8 @@ try {
   await page
     .getByRole("heading", { name: "Unsaved paging draft", exact: true })
     .waitFor();
-  await page.goto(
+  await visit(
+    page,
     config.origin + `/studio/projects/${project}?tab=notes#record-${old.id}`,
   );
   await page
@@ -725,7 +744,7 @@ try {
       title: `Feedback history ${i}`,
       body: "Synthetic client history.",
     });
-  await client.goto(config.origin + `/space/projects/${project}`);
+  await visit(client, config.origin + `/space/projects/${project}`);
   await client
     .getByRole("heading", { name: "A shared project update", exact: true })
     .waitFor();
@@ -733,7 +752,10 @@ try {
     await client.getByText("History note 0", { exact: true }).count(),
     0,
   );
-  await client.goto(config.origin + `/space/projects/${project}?tab=feedback`);
+  await visit(
+    client,
+    config.origin + `/space/projects/${project}?tab=feedback`,
+  );
   await client
     .getByRole("button", { name: "Load older records", exact: true })
     .waitFor();
