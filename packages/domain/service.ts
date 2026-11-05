@@ -213,10 +213,25 @@ export class Domain {
       client,
       options,
     );
-    const tasks = this.s.all(
-      `SELECT * FROM tasks WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at,id`,
-      project,
+    const activeMembers = new Map(
+      this.s
+        .all(
+          "SELECT m.user_id,u.name FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.project_id=? AND m.role IN ('owner','contributor') AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?)",
+          project,
+          now(),
+        )
+        .map((r) => [r.user_id, r.name]),
     );
+    const tasks = this.s
+      .all(
+        `SELECT * FROM tasks WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at,id`,
+        project,
+      )
+      .map((t) => ({
+        ...t,
+        assignee_id: activeMembers.has(t.assignee_id) ? t.assignee_id : null,
+        assignee_name: activeMembers.get(t.assignee_id) ?? null,
+      }));
     const milestones = this.s.all(
       `SELECT * FROM project_milestones WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY target_date IS NULL,target_date,created_at,id`,
       project,
@@ -1176,9 +1191,20 @@ export class Domain {
           )
         : undefined;
       if (taskId) assert(old, 404, "Task not found.");
+      const assignmentIsActive = (target: string) =>
+        !!this.s.get(
+          "SELECT 1 FROM memberships WHERE project_id=? AND user_id=? AND role IN ('owner','contributor') AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>?)",
+          project,
+          target,
+          now(),
+        );
+      const previousAssignee =
+        old?.assignee_id && assignmentIsActive(old.assignee_id)
+          ? old.assignee_id
+          : null;
       const assigneeId =
         b.assignee_id === undefined
-          ? (old?.assignee_id ?? null)
+          ? previousAssignee
           : b.assignee_id === "" || b.assignee_id === null
             ? null
             : text(b.assignee_id, "Assignee", 100);
@@ -1200,19 +1226,14 @@ export class Domain {
       }
       if (m.role !== "owner")
         assert(
-          assigneeId === (old?.assignee_id ?? null) &&
+          (b.assignee_id === undefined || assigneeId === previousAssignee) &&
             dueDate === (old?.due_date ?? null),
           403,
           "Only the project owner can set task assignments and due dates.",
         );
       if (assigneeId)
         assert(
-          this.s.get(
-            "SELECT 1 FROM memberships WHERE project_id=? AND user_id=? AND role IN ('owner','contributor') AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>?)",
-            project,
-            assigneeId,
-            now(),
-          ),
+          assignmentIsActive(assigneeId),
           400,
           "Assign only an active project owner or contributor.",
         );
