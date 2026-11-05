@@ -182,7 +182,6 @@ try {
   await capture(page, "studio-ownership-plan", 1440);
   await page.getByRole("link", { name: "Room", exact: true }).click();
 
-
   await page.locator("#record-kind").selectOption("note");
   await page.locator("#record-title").fill("Architecture context");
   await page
@@ -379,7 +378,6 @@ try {
   assert.equal(await client.evaluate(() => window.xss), undefined);
   await capture(client, "client-ownership-plan", 390);
   await client.getByRole("link", { name: "Overview", exact: true }).click();
-
 
   for (const w of [320, 390, 768, 1024, 1440, 1920])
     await capture(client, "client-space", w);
