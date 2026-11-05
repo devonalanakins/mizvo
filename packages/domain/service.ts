@@ -319,6 +319,10 @@ export class Domain {
       milestones,
       client_decisions,
       brief,
+      shared_brief_version: this.s.get(
+        "SELECT version FROM project_brief_revisions WHERE project_id=? AND visibility='client' ORDER BY version DESC LIMIT 1",
+        project,
+      )?.version ?? null,
       releases,
       members: this.s.all(
         "SELECT m.role,m.user_id,m.expires_at,m.revoked_at,u.name,u.email FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.project_id=?",
