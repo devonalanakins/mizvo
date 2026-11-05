@@ -501,9 +501,7 @@ export function application(
         const view = d.room(user, project, client, {
           before: params.get("before") ?? undefined,
           kind: params.get("kind") ?? undefined,
-          limit: params.has("limit")
-            ? Number(params.get("limit"))
-            : undefined,
+          limit: params.has("limit") ? Number(params.get("limit")) : undefined,
         });
         send(
           res,

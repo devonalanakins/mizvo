@@ -362,13 +362,14 @@ function previewReceipt(r: Data, client = false) {
   const latest = (r.preview_observations ?? [])[0];
   if (!latest)
     return `<p class="muted">Preview reachability has not been checked. A recorded URL does not establish a functioning deployment.</p>`;
-  const label = latest.result === "reachable"
-    ? "Responded to a read-only request"
-    : latest.result === "redirect_denied"
-      ? "Redirect refused"
-      : latest.result === "http_error"
-        ? "Endpoint returned an error"
-        : "Connection failed";
+  const label =
+    latest.result === "reachable"
+      ? "Responded to a read-only request"
+      : latest.result === "redirect_denied"
+        ? "Redirect refused"
+        : latest.result === "http_error"
+          ? "Endpoint returned an error"
+          : "Connection failed";
   return `<section class="preview-receipt" aria-label="Preview reachability"><strong>${e(label)}</strong><p class="muted">Checked ${date(latest.observed_at)}${latest.http_status ? ` · HTTP ${e(latest.http_status)}` : ""}. Reachability is not proof of a deployment, identity, or client acceptance.</p>${!client && latest.reported_commit ? `<p class="version">Untrusted response header ${e(latest.reported_commit)} · ${latest.commit_matches ? "matches recorded commit" : "does not match recorded commit"}</p>` : ""}</section>`;
 }
 function proofSummary(client = false) {
@@ -376,17 +377,41 @@ function proofSummary(client = false) {
     .flatMap((r: Data) => r.preview_observations ?? [])
     .sort((a: Data, b: Data) => b.observed_at.localeCompare(a.observed_at));
   const recent = previews[0];
-  const source = !client && room!.releases.some((r: Data) =>
-    (r.source_evidence ?? []).some((x: Data) => x.ci_state === "success")
-  );
+  const source =
+    !client &&
+    room!.releases.some((r: Data) =>
+      (r.source_evidence ?? []).some((x: Data) => x.ci_state === "success"),
+    );
   const responded = room!.client_decisions.some(
-    (d: Data) => d.status === "answered" && !!d.brief_revision_id
+    (d: Data) => d.status === "answered" && !!d.brief_revision_id,
   );
   const stages = [
-    ["01 / Need", room!.brief ? `Living Brief revision ${e(room!.brief.revision)} recorded` : "No shared Living Brief"],
-    ["02 / Decision", responded ? "A version-bound client response was recorded" : "No version-bound client response yet"],
-    ["03 / Preview", recent ? `${e(recent.result.replaceAll("_", " "))} · checked ${date(recent.observed_at)}` : "Not observed"],
-    ["04 / Source", client ? "Internal checks are not disclosed here" : source ? "GitHub CI was observed; inspect the exact version" : "No successful CI observation recorded"],
+    [
+      "01 / Need",
+      room!.brief
+        ? `Living Brief revision ${e(room!.brief.revision)} recorded`
+        : "No shared Living Brief",
+    ],
+    [
+      "02 / Decision",
+      responded
+        ? "A version-bound client response was recorded"
+        : "No version-bound client response yet",
+    ],
+    [
+      "03 / Preview",
+      recent
+        ? `${e(recent.result.replaceAll("_", " "))} · checked ${date(recent.observed_at)}`
+        : "Not observed",
+    ],
+    [
+      "04 / Source",
+      client
+        ? "Internal checks are not disclosed here"
+        : source
+          ? "GitHub CI was observed; inspect the exact version"
+          : "No successful CI observation recorded",
+    ],
     ["05 / Operate", "Production deployment not verified"],
     ["06 / Care", "Backup, restore and handoff not verified"],
   ];

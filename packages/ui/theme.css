@@ -1592,7 +1592,10 @@ pre {
 }
 
 .proof-summary h2 {
-  font: 400 clamp(24px, 2.7vw, 34px)/1.2 Editorial, Georgia, serif;
+  font:
+    400 clamp(24px, 2.7vw, 34px) / 1.2 Editorial,
+    Georgia,
+    serif;
   margin: 6px 0 8px;
 }
 .proof-steps > div {

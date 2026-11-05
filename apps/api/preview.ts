@@ -19,13 +19,17 @@ function safePreviewUrl(input: string): string {
   const parsed = new URL(input);
   assert(
     parsed.protocol === "https:" &&
-      !parsed.username && !parsed.password &&
-      !parsed.search && !parsed.hash &&
+      !parsed.username &&
+      !parsed.password &&
+      !parsed.search &&
+      !parsed.hash &&
       !isIP(parsed.hostname) &&
       parsed.hostname.includes(".") &&
       !parsed.hostname.startsWith(".") &&
       !parsed.hostname.endsWith(".") &&
-      !/\.(local|localhost|internal|test|invalid|example)$/i.test(parsed.hostname) &&
+      !/\.(local|localhost|internal|test|invalid|example)$/i.test(
+        parsed.hostname,
+      ) &&
       parsed.port === "",
     400,
     "Preview checks require a configured public HTTPS URL without credentials or query tokens.",
@@ -35,11 +39,10 @@ function safePreviewUrl(input: string): string {
 
 export class PreviewProbe {
   private readonly allowlist: ReadonlySet<string>;
-  constructor(
-    urls: string[] = [],
-    private readonly transport: typeof fetch = fetch,
-  ) {
+  private readonly transport: typeof fetch;
+  constructor(urls: string[] = [], transport: typeof fetch = fetch) {
     this.allowlist = new Set(urls.map((u) => safePreviewUrl(u)));
+    this.transport = transport;
   }
 
   allows(value: string): boolean {
@@ -52,7 +55,11 @@ export class PreviewProbe {
   }
 
   async observe(value: string, sha: string): Promise<PreviewObservation> {
-    assert(this.allows(value), 409, "This preview URL is not enabled for observation by the installation administrator.");
+    assert(
+      this.allows(value),
+      409,
+      "This preview URL is not enabled for observation by the installation administrator.",
+    );
     assert(/^[a-f0-9]{40}$/.test(sha), 400, "Invalid release commit.");
     const result: PreviewObservation = {
       preview_url: value,
@@ -73,11 +80,12 @@ export class PreviewProbe {
         signal: AbortSignal.timeout(5000),
       });
       result.http_status = response.status;
-      result.result = response.status >= 200 && response.status < 300
-        ? "reachable"
-        : response.status >= 300 && response.status < 400
-          ? "redirect_denied"
-          : "http_error";
+      result.result =
+        response.status >= 200 && response.status < 300
+          ? "reachable"
+          : response.status >= 300 && response.status < 400
+            ? "redirect_denied"
+            : "http_error";
       const reported = response.headers.get("X-Mizvo-Source-Commit");
       if (reported && /^[a-f0-9]{40}$/.test(reported)) {
         result.reported_commit = reported;

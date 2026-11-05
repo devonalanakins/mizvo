@@ -1205,7 +1205,11 @@ export class Domain {
   ) {
     return this.s.transaction(() => {
       const grant = owner(this.s, project, user);
-      assert(grant.organization_id === this.organization, 404, "Project not found.");
+      assert(
+        grant.organization_id === this.organization,
+        404,
+        "Project not found.",
+      );
       const r = this.s.get(
         "SELECT commit_sha,demo_url FROM releases WHERE id=? AND project_id=?",
         release,
@@ -1219,9 +1223,12 @@ export class Domain {
         "Preview release or URL changed during observation.",
       );
       assert(
-        ["reachable", "http_error", "redirect_denied", "network_error"].includes(
-          observation.result,
-        ),
+        [
+          "reachable",
+          "http_error",
+          "redirect_denied",
+          "network_error",
+        ].includes(observation.result),
         400,
         "Invalid preview observation.",
       );

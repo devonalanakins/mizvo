@@ -16,12 +16,12 @@ const config = {
   previewUrls: ["https://preview.example.org/check"],
 };
 const app = application(config, {
-    previewFetch: (async (input, options) => {
+    previewFetch: async (input, options) => {
       assert.equal(String(input), "https://preview.example.org/check");
       assert.equal(options.method, "HEAD");
       assert.equal(options.redirect, "manual");
       return new Response(null, { status: 200 });
-    }),
+    },
   }),
   password = "Browser-only-test-password-2026";
 const founder = account(
@@ -454,7 +454,9 @@ try {
       })
       .waitFor();
   await page.once("dialog", async (d) => await d.accept());
-  await page.getByRole("button", { name: "Check preview reachability" }).click();
+  await page
+    .getByRole("button", { name: "Check preview reachability" })
+    .click();
   await page.getByText("Responded to a read-only request").waitFor();
   await capture(page, "release-evidence", 1440);
   await capture(page, "release-evidence", 390);

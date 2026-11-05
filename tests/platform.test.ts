@@ -2935,10 +2935,17 @@ test("preview probe requires administrator exact public HTTPS allowlist and neve
     "https://preview.example.org:8443/check",
     "https://user:password@preview.example.org/check",
   ]) {
-    assert.throws(() => new PreviewProbe([bad]), "Invalid configured URL: " + bad);
+    assert.throws(
+      () => new PreviewProbe([bad]),
+      "Invalid configured URL: " + bad,
+    );
   }
-  let mode = "ok", count = 0;
-  const probe = new PreviewProbe([target], (async (input: any, options: any) => {
+  let mode = "ok",
+    count = 0;
+  const probe = new PreviewProbe([target], (async (
+    input: any,
+    options: any,
+  ) => {
     count++;
     assert.equal(String(input), target);
     assert.equal(options.method, "HEAD");
@@ -2946,7 +2953,8 @@ test("preview probe requires administrator exact public HTTPS allowlist and neve
     assert.equal(options.credentials, "omit");
     assert.equal(options.cache, "no-store");
     assert.equal(options.headers.Accept, "text/html");
-    if (mode === "network") throw new Error("INTERNAL_PRIVATE_TRANSPORT_DETAILS");
+    if (mode === "network")
+      throw new Error("INTERNAL_PRIVATE_TRANSPORT_DETAILS");
     if (mode === "redirect")
       return new Response(null, {
         status: 302,
@@ -2955,7 +2963,10 @@ test("preview probe requires administrator exact public HTTPS allowlist and neve
     if (mode === "error") return new Response(null, { status: 503 });
     return new Response(null, {
       status: 200,
-      headers: { "X-Mizvo-Source-Commit": mode === "wrong" ? "b".repeat(40) : "a".repeat(40) },
+      headers: {
+        "X-Mizvo-Source-Commit":
+          mode === "wrong" ? "b".repeat(40) : "a".repeat(40),
+      },
     });
   }) as typeof fetch);
   assert.equal(probe.allows(target), true);
@@ -2992,7 +3003,9 @@ test("preview probe requires administrator exact public HTTPS allowlist and neve
   observed = await probe.observe(target, expected);
   assert.equal(observed.result, "network_error");
   assert.equal(observed.http_status, null);
-  assert(!JSON.stringify(observed).includes("INTERNAL_PRIVATE_TRANSPORT_DETAILS"));
+  assert(
+    !JSON.stringify(observed).includes("INTERNAL_PRIVATE_TRANSPORT_DETAILS"),
+  );
   assert.equal(count, 5);
 });
 
@@ -3014,7 +3027,9 @@ test("preview observations preserve exact release binding, reauthorize after I/O
     if (mode === "error") return new Response(null, { status: 503 });
     return new Response(null, {
       status: 200,
-      headers: { "X-Mizvo-Source-Commit": mode === "wrong" ? "b".repeat(40) : sha },
+      headers: {
+        "X-Mizvo-Source-Commit": mode === "wrong" ? "b".repeat(40) : sha,
+      },
     });
   }) as typeof fetch;
   const f = await fixture(undefined, { urls: [target], transport });
@@ -3023,47 +3038,147 @@ test("preview observations preserve exact release binding, reauthorize after I/O
       contributor = await f.login(f.users.contributor.email),
       client = await f.login(f.users.client.email),
       otherClient = await f.login(f.users.other.email);
-    const project = (await f.request("/projects", "POST", {
-      name: "Observed Preview", purpose: "Show recorded proof honestly."
-    }, founder)).value.id;
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Observed Preview",
+          purpose: "Show recorded proof honestly.",
+        },
+        founder,
+      )
+    ).value.id;
     const path = "/projects/" + project;
     for (const [person, role, session] of [
       [f.users.contributor, "contributor", contributor],
       [f.users.client, "client", client],
     ] as const) {
-      const invite = (await f.request(path + "/invitations", "POST", {
-        email: person.email, role,
-      }, founder)).value;
-      assert.equal((await f.request("/invitations/accept", "POST", {
-        token: invite.token
-      }, session)).status, 200);
+      const invite = (
+        await f.request(
+          path + "/invitations",
+          "POST",
+          {
+            email: person.email,
+            role,
+          },
+          founder,
+        )
+      ).value;
+      assert.equal(
+        (
+          await f.request(
+            "/invitations/accept",
+            "POST",
+            {
+              token: invite.token,
+            },
+            session,
+          )
+        ).status,
+        200,
+      );
     }
-    const release = (await f.request(path + "/releases", "POST", {
-      label: "Staging preview candidate", summary: "Recorded version, not deployed.",
-      commit_sha: sha, demo_url: target, visibility: "client",
-      rollback: "Return to previous version.",
-    }, founder)).value.id;
-    const unallowed = (await f.request(path + "/releases", "POST", {
-      label: "Unconfigured demo URL", summary: "Not in the administrator allowlist.",
-      commit_sha: sha, demo_url: wrongUrl, visibility: "client",
-      rollback: "No action.",
-    }, founder)).value.id;
-    const internal = (await f.request(path + "/releases", "POST", {
-      label: "Private preview", summary: "Private evidence.",
-      commit_sha: sha, demo_url: target, visibility: "internal",
-      rollback: "No action.",
-    }, founder)).value.id;
-    const otherProject = (await f.request("/projects", "POST", {
-      name: "Unrelated", purpose: "Do not leak evidence.",
-    }, founder)).value.id;
+    const release = (
+      await f.request(
+        path + "/releases",
+        "POST",
+        {
+          label: "Staging preview candidate",
+          summary: "Recorded version, not deployed.",
+          commit_sha: sha,
+          demo_url: target,
+          visibility: "client",
+          rollback: "Return to previous version.",
+        },
+        founder,
+      )
+    ).value.id;
+    const unallowed = (
+      await f.request(
+        path + "/releases",
+        "POST",
+        {
+          label: "Unconfigured demo URL",
+          summary: "Not in the administrator allowlist.",
+          commit_sha: sha,
+          demo_url: wrongUrl,
+          visibility: "client",
+          rollback: "No action.",
+        },
+        founder,
+      )
+    ).value.id;
+    const internal = (
+      await f.request(
+        path + "/releases",
+        "POST",
+        {
+          label: "Private preview",
+          summary: "Private evidence.",
+          commit_sha: sha,
+          demo_url: target,
+          visibility: "internal",
+          rollback: "No action.",
+        },
+        founder,
+      )
+    ).value.id;
+    const otherProject = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Unrelated",
+          purpose: "Do not leak evidence.",
+        },
+        founder,
+      )
+    ).value.id;
     const check = path + "/releases/" + release + "/observe-preview";
     assert.equal((await f.request(check, "POST", {}, contributor)).status, 403);
-    assert.equal((await f.request("/space" + check, "POST", {}, client)).status, 404);
+    assert.equal(
+      (await f.request("/space" + check, "POST", {}, client)).status,
+      404,
+    );
     assert.equal((await f.request(check, "POST", {}, otherClient)).status, 404);
-    assert.equal((await f.request("/projects/" + otherProject + "/releases/" + release + "/observe-preview", "POST", {}, founder)).status, 404);
-    assert.equal((await f.request(path + "/releases/" + unallowed + "/observe-preview", "POST", {}, founder)).status, 409);
-    assert.equal(hits, 0, "Unauthorized and unconfigured attempts make no request");
-    let response = await f.request(check, "POST", { result: "production_observed" }, founder);
+    assert.equal(
+      (
+        await f.request(
+          "/projects/" +
+            otherProject +
+            "/releases/" +
+            release +
+            "/observe-preview",
+          "POST",
+          {},
+          founder,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/releases/" + unallowed + "/observe-preview",
+          "POST",
+          {},
+          founder,
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      hits,
+      0,
+      "Unauthorized and unconfigured attempts make no request",
+    );
+    let response = await f.request(
+      check,
+      "POST",
+      { result: "production_observed" },
+      founder,
+    );
     assert.equal(response.status, 201);
     assert.equal(response.value.result, "reachable");
     assert.equal(response.value.expected_commit, sha);
@@ -3073,22 +3188,53 @@ test("preview observations preserve exact release binding, reauthorize after I/O
     const releaseOwner = ownerRoom.releases.find((r: any) => r.id === release);
     assert.equal(releaseOwner.preview_probe_allowed, true);
     assert.equal(releaseOwner.preview_observations[0].expected_commit, sha);
-    assert.equal(ownerRoom.releases.find((r: any) => r.id === unallowed).preview_probe_allowed, false);
-    const clientRoom = (await f.request("/space" + path, "GET", undefined, client)).value;
-    const releaseClient = clientRoom.releases.find((r: any) => r.id === release);
+    assert.equal(
+      ownerRoom.releases.find((r: any) => r.id === unallowed)
+        .preview_probe_allowed,
+      false,
+    );
+    const clientRoom = (
+      await f.request("/space" + path, "GET", undefined, client)
+    ).value;
+    const releaseClient = clientRoom.releases.find(
+      (r: any) => r.id === release,
+    );
     assert.equal(releaseClient.preview_observations[0].result, "reachable");
     assert.equal(releaseClient.preview_observations[0].http_status, 200);
-    assert(!JSON.stringify(releaseClient.preview_observations).includes("actor_id"));
+    assert(
+      !JSON.stringify(releaseClient.preview_observations).includes("actor_id"),
+    );
     assert(!JSON.stringify(clientRoom).includes("commit_matches"));
     assert(!JSON.stringify(clientRoom).includes("reported_commit"));
     assert(!JSON.stringify(clientRoom).includes("preview_probe_allowed"));
     assert(!JSON.stringify(clientRoom).includes("Private preview"));
-    assert.equal((await f.request("/space" + path, "GET", undefined, otherClient)).status, 404);
+    assert.equal(
+      (await f.request("/space" + path, "GET", undefined, otherClient)).status,
+      404,
+    );
     const reopened = new Store(f.config.database);
     try {
-      assert.equal(reopened.get("SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",release)?.count,1);
-      assert.equal(reopened.get("SELECT actor_id FROM preview_observations WHERE release_id=?",release)?.actor_id,f.users.owner.id);
-      assert.equal(reopened.get("SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",internal)?.count,0);
+      assert.equal(
+        reopened.get(
+          "SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",
+          release,
+        )?.count,
+        1,
+      );
+      assert.equal(
+        reopened.get(
+          "SELECT actor_id FROM preview_observations WHERE release_id=?",
+          release,
+        )?.actor_id,
+        f.users.owner.id,
+      );
+      assert.equal(
+        reopened.get(
+          "SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",
+          internal,
+        )?.count,
+        0,
+      );
     } finally {
       reopened.close();
     }
@@ -3106,22 +3252,42 @@ test("preview observations preserve exact release binding, reauthorize after I/O
     assert.equal(response.status, 201);
     assert.equal(response.value.result, "network_error");
     assert(!JSON.stringify(response.value).includes("private host info"));
-    f.app.s.run("DELETE FROM rate_limits WHERE key=?", "preview:" + f.users.owner.id);
-    onRequest = () => f.app.s.run(
-      "UPDATE releases SET demo_url=? WHERE id=?",
-      wrongUrl, release,
+    f.app.s.run(
+      "DELETE FROM rate_limits WHERE key=?",
+      "preview:" + f.users.owner.id,
     );
+    onRequest = () =>
+      f.app.s.run(
+        "UPDATE releases SET demo_url=? WHERE id=?",
+        wrongUrl,
+        release,
+      );
     mode = "ok";
     assert.equal((await f.request(check, "POST", {}, founder)).status, 409);
-    assert.equal(f.app.s.get("SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",release)?.count,4);
-    f.app.s.run("UPDATE releases SET demo_url=? WHERE id=?",target,release);
-    onRequest = () => f.app.s.run(
-      "UPDATE memberships SET revoked_at=? WHERE project_id=? AND user_id=?",
-      new Date().toISOString(), project, f.users.owner.id,
+    assert.equal(
+      f.app.s.get(
+        "SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",
+        release,
+      )?.count,
+      4,
     );
+    f.app.s.run("UPDATE releases SET demo_url=? WHERE id=?", target, release);
+    onRequest = () =>
+      f.app.s.run(
+        "UPDATE memberships SET revoked_at=? WHERE project_id=? AND user_id=?",
+        new Date().toISOString(),
+        project,
+        f.users.owner.id,
+      );
     assert.equal((await f.request(check, "POST", {}, founder)).status, 404);
-    assert.equal(f.app.s.get("SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",release)?.count,4);
-    assert.equal(hits,6);
+    assert.equal(
+      f.app.s.get(
+        "SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",
+        release,
+      )?.count,
+      4,
+    );
+    assert.equal(hits, 6);
   } finally {
     await f.stop();
   }
