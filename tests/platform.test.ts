@@ -3928,7 +3928,7 @@ test("V0.17 migration preserves existing tasks and refuses older release schemas
     assert.equal(upgraded.assignee_id, null);
     assert.equal(upgraded.due_date, null);
     const { assignee_id, due_date, ...preserved } = upgraded;
-    assert.deepEqual(preserved, before);
+    assert.deepEqual({ ...preserved }, { ...before });
     assert.equal(store.get("PRAGMA integrity_check")!.integrity_check, "ok");
     assert.deepEqual(store.all("PRAGMA foreign_key_check"), []);
     store.close();
