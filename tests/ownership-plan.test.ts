@@ -51,8 +51,6 @@ test("ownership plan: private drafts, immutable revisions, client projection, de
     return { status: r.status, data: await r.json() as any };
   }
   async function login(email: string): Promise<Identity> {
-    const result = await request("/login", "POST", { email, password });
-    assert.equal(result.status, 200);
     const r = await fetch(`http://127.0.0.1:${address.port}/api/login`, {
       method: "POST",
       headers: { Origin: config.origin, "Content-Type": "application/json" },
@@ -171,7 +169,7 @@ test("ownership plan: private drafts, immutable revisions, client projection, de
     reopened.close();
 
     assert.equal((await request(path + "/members/" + client.id, "PATCH", {
-      role: "client", revoked: true,
+      revoke: true,
     }, a)).status, 200);
     assert.equal((await request("/space" + path, "GET", undefined, b)).status, 404);
   } finally {
