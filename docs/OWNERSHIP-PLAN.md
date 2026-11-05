@@ -19,7 +19,7 @@ This menu is a planning model. It does not bind a customer or create infrastruct
 
 ## Data and versioning
 
-Migration `007-ownership-plan.sql` creates `project_ownership_revisions` with an immutable, project-scoped revision number, selected model, **planned** domain, named infrastructure and billing owners (descriptive labels only, not identifiers or credentials), planned technical operator, export/handoff plan, support boundary, internal or client visibility, author and timestamp.
+Migration `008-ownership-plan.sql` creates `project_ownership_revisions` with an immutable, project-scoped revision number, selected model, **planned** domain, named infrastructure and billing owners (descriptive labels only, not identifiers or credentials), planned technical operator, export/handoff plan, support boundary, internal or client visibility, author and timestamp.
 
 Only the project owner can create a new revision, and must specify the exact latest version as `base_revision`; stale writes are rejected with 409. The previous record is never overwritten. A project-specific, server-side membership check is enforced before reading or changing the plan. Clients receive **only the latest explicitly shared revision** and never receive internal drafts, actor IDs, revision history or other projects' plans. New internal drafts do not retract an older shared plan.
 
