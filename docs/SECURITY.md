@@ -18,6 +18,7 @@ No open registration, collaborator email, automatic invitation delivery, AI proc
 - Atomic project/audit/history changes, monotonic audit sequence, immutable release records and one attributable review per actor/version. Release authors cannot approve their own release.
 - Persistent per-IP and account-specific rate limits, input caps and honeypot/consent validation for public inquiry. Notifications contain generic activity, not confidential text.
 - Exact GitHub repository allowlist, project access, read-only API calls, deadlines and bounded upstream response streams. No arbitrary host URLs or process execution.
+- Preview checks are owner-only, rate-limited and disabled without an administrator exact-URL allowlist. The guarded default transport validates all DNS answers against public-address ranges and pins the selected IP into an HTTPS HEAD socket with hostname SNI/certificate verification, redirects disabled, and no response-body ingestion. Operational outbound network restrictions and an independent production SSRF review are still required.
 - Checksummed, transactional, ordered SQL migrations; incompatible schema downgrades and edited migrations are refused. Backup uses SQLite’s online backup API and integrity checks, not a raw copy of a live WAL file.
 - Generic internal errors and request IDs without request-body or credential logging.
 
