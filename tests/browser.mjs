@@ -347,6 +347,15 @@ try {
     .getByRole("heading", { name: "Verify persistent project context" })
     .waitFor();
   await capture(page, "plan", 1440);
+  await page.getByRole("button", { name: "Add milestone" }).click();
+  await page.getByLabel("Milestone title").fill("Founder milestone checkpoint");
+  await page.getByLabel("Outcome and acceptance context").fill("Concrete reviewable user value.");
+  await page.getByLabel("Milestone visibility").selectOption("client");
+  await page.getByRole("button", { name: "Save milestone" }).click();
+  await page.getByRole("heading", { name: "Founder milestone checkpoint" }).waitFor();
+  await client.goto(config.origin + `/space/projects/${project}?tab=plan`);
+  await client.getByRole("heading", { name: "Founder milestone checkpoint" }).waitFor();
+  await capture(client, "client-milestones", 390);
   await page.goto(config.origin + `/studio/projects/${project}?tab=releases`);
   await page
     .getByRole("heading", { name: "Verification version 1", exact: true })

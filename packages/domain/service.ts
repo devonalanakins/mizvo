@@ -216,6 +216,10 @@ export class Domain {
       `SELECT * FROM tasks WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at,id`,
       project,
     );
+    const milestones = this.s.all(
+      `SELECT * FROM project_milestones WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY target_date IS NULL,target_date,created_at,id`,
+      project,
+    );
     const releases: Row[] = this.s
       .all(
         `SELECT * FROM releases WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at DESC,id`,
@@ -253,13 +257,26 @@ export class Domain {
         role: m.role,
         records,
         record_page,
-        tasks: tasks.map(({ id, title, milestone, status, updated_at }) => ({
-          id,
-          title,
-          milestone,
-          status,
-          updated_at,
-        })),
+        tasks: tasks.map(
+          ({ id, title, milestone, milestone_id, status, updated_at }) => ({
+            id,
+            title,
+            milestone,
+            milestone_id,
+            status,
+            updated_at,
+          }),
+        ),
+        milestones: milestones.map(
+          ({ id, title, summary, status, target_date, updated_at }) => ({
+            id,
+            title,
+            summary,
+            status,
+            target_date,
+            updated_at,
+          }),
+        ),
         releases: releases.map(
           ({
             id,
@@ -295,6 +312,7 @@ export class Domain {
           project,
         ) ?? null,
       tasks,
+      milestones,
       releases,
       members: this.s.all(
         "SELECT m.role,m.user_id,m.expires_at,m.revoked_at,u.name,u.email FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.project_id=?",
@@ -616,10 +634,86 @@ export class Domain {
       );
     });
   }
+  milestone(user: string, project: string, b: Row, milestoneId?: string) {
+    const access = owner(this.s, project, user);
+    assert(access.organization_id === this.organization, 404, "Project not found.");
+    const title = text(b.title, "Milestone title", 200),
+      summary = text(b.summary ?? "", "Milestone summary", 4000, 0),
+      status = choice(
+        b.status ?? "planned",
+        ["planned", "active", "blocked", "review", "done"],
+        "milestone status",
+      ),
+      visibility = choice(
+        b.visibility ?? "internal",
+        ["internal", "client"],
+        "visibility",
+      ),
+      targetDate =
+        b.target_date == null || b.target_date === ""
+          ? null
+          : text(b.target_date, "Target date", 10, 10);
+    assert(
+      !targetDate ||
+        (/^\d{4}-\d{2}-\d{2}$/.test(targetDate) &&
+          !Number.isNaN(Date.parse(targetDate)) &&
+          new Date(targetDate).toISOString().slice(0, 10) === targetDate),
+      400,
+      "Use a real YYYY-MM-DD target date.",
+    );
+    return this.s.transaction(() => {
+      const old = milestoneId
+        ? this.s.get(
+            "SELECT * FROM project_milestones WHERE id=? AND project_id=?",
+            milestoneId,
+            project,
+          )
+        : undefined;
+      if (milestoneId) assert(old, 404, "Milestone not found.");
+      if (old && visibility === "internal")
+        assert(
+          !this.s.get(
+            "SELECT 1 FROM tasks WHERE milestone_id=? AND visibility='client' LIMIT 1",
+            milestoneId,
+          ),
+          409,
+          "Move shared tasks before hiding this milestone.",
+        );
+      if (status === "done" && milestoneId)
+        assert(
+          !this.s.get(
+            "SELECT 1 FROM tasks WHERE milestone_id=? AND status<>'done' LIMIT 1",
+            milestoneId,
+          ),
+          409,
+          "Complete linked tasks before closing this milestone.",
+        );
+      const key = milestoneId ?? id(), stamp = now();
+      if (milestoneId) {
+        const updated = this.s.run(
+          "UPDATE project_milestones SET title=?,summary=?,status=?,visibility=?,target_date=?,version=version+1,updated_at=? WHERE id=? AND project_id=? AND version=?",
+          title, summary, status, visibility, targetDate, stamp,
+          key, project, version(b.version),
+        );
+        assert(updated.changes, 409, "Milestone changed. Reload before updating.");
+        if (old.title !== title)
+          this.s.run(
+            "UPDATE tasks SET milestone=?,version=version+1,updated_at=? WHERE milestone_id=?",
+            title, stamp, key,
+          );
+      } else {
+        this.s.run(
+          "INSERT INTO project_milestones(id,project_id,title,summary,status,visibility,target_date,actor_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          key, project, title, summary, status, visibility, targetDate, user, stamp, stamp,
+        );
+      }
+      this.audit(project, user, milestoneId ? "milestone.updated" : "milestone.created", key);
+      return { id: key };
+    });
+  }
   task(user: string, project: string, b: Row, taskId?: string) {
     const m = membership(this.s, project, user, true);
     const title = text(b.title, "Task title", 200),
-      milestone = text(b.milestone ?? "Project", "Milestone", 120),
       status = choice(
         b.status ?? "todo",
         ["todo", "doing", "blocked", "review", "done"],
@@ -641,6 +735,30 @@ export class Domain {
           )
         : undefined;
       if (taskId) assert(old, 404, "Task not found.");
+      const milestoneId =
+        b.milestone_id === undefined ? old?.milestone_id : b.milestone_id;
+      const linked = milestoneId
+        ? this.s.get(
+            "SELECT * FROM project_milestones WHERE id=? AND project_id=?",
+            text(milestoneId, "Linked milestone", 100),
+            project,
+          )
+        : undefined;
+      if (milestoneId)
+        assert(linked, 400, "Linked milestone must belong to this project.");
+      assert(
+        !linked || visibility !== "client" || linked.visibility === "client",
+        400,
+        "Share the milestone before linking a client-visible task.",
+      );
+      assert(
+        !linked || linked.status !== "done" || status === "done",
+        409,
+        "Reopen the completed milestone before adding unfinished work.",
+      );
+      const milestone = linked
+        ? linked.title
+        : text(b.milestone ?? old?.milestone ?? "Project", "Milestone", 120);
       const dependency = b.depends_on
         ? this.s.get(
             "SELECT * FROM tasks WHERE id=? AND project_id=?",
@@ -685,7 +803,7 @@ export class Domain {
       const task = taskId ?? id();
       if (taskId) {
         const r = this.s.run(
-          "UPDATE tasks SET title=?,milestone=?,status=?,priority=?,evidence=?,review_required=?,reviewed_by=?,depends_on=?,visibility=?,version=version+1,updated_at=? WHERE id=? AND version=?",
+          "UPDATE tasks SET title=?,milestone=?,status=?,priority=?,evidence=?,review_required=?,reviewed_by=?,depends_on=?,visibility=?,milestone_id=?,version=version+1,updated_at=? WHERE id=? AND version=?",
           title,
           milestone,
           status,
@@ -695,6 +813,7 @@ export class Domain {
           status === "done" && review ? user : null,
           dependency?.id ?? null,
           visibility,
+          linked?.id ?? null,
           now(),
           task,
           version(b.version),
@@ -702,7 +821,7 @@ export class Domain {
         assert(r.changes, 409, "Task changed. Reload before updating.");
       } else
         this.s.run(
-          "INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?, ?,1,?,?)",
+          "INSERT INTO tasks(id,project_id,title,milestone,status,priority,evidence,review_required,reviewed_by,depends_on,visibility,actor_id,version,created_at,updated_at,milestone_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)",
           task,
           project,
           title,
@@ -717,6 +836,7 @@ export class Domain {
           user,
           now(),
           now(),
+          linked?.id ?? null,
         );
       this.audit(project, user, taskId ? "task.updated" : "task.created", task);
     });

@@ -326,8 +326,17 @@ function inspectorPanel() {
     .join("")}</section></aside>`;
 }
 function tasks() {
-  const list = room!.tasks;
-  return `<div class="row between" data-layout="layout-2"><div><h2>Plan / Milestones</h2><p class="muted">Completion follows evidence and required review.</p></div>${route.surface === "studio" ? button(`${icon("plus")} Add task`, "new-task", "") : ""}</div>${list.length ? list.map((t: Data) => `<article class="task"><span>${icon(t.status === "done" ? "check" : "plan")}</span><div class="task-copy"><h3>${e(t.title)}</h3><small>${e(t.milestone)} ${t.depends_on ? "· Has a dependency" : ""}</small><div class="row" data-layout="layout-3">${badge(t.status)}${t.priority === "high" ? badge("high") : ""}</div>${t.evidence ? `<p class="prose muted" data-layout="layout-4">${e(t.evidence)}</p>` : ""}</div>${route.surface === "studio" ? button("Update", `edit-task:${t.id}`) : ""}</article>`).join("") : empty("A clear plan starts with one step.", "Milestones and tasks created here stay connected to this project.")}`;
+  const list = room!.tasks,
+    milestones = room!.milestones ?? [],
+    studio = route.surface === "studio",
+    canEdit = studio && room!.role === "owner";
+  const cards = milestones.map((m: Data) => {
+    const linked = studio
+      ? list.filter((t: Data) => t.milestone_id === m.id)
+      : [];
+    return `<article class="card"><div class="row between"><h3>${e(m.title)}</h3>${badge(m.status)}</div>${m.summary ? `<p class="prose muted">${e(m.summary)}</p>` : ""}${m.target_date ? `<p class="muted">Target: ${e(m.target_date)}</p>` : ""}${studio ? `<p class="muted">${linked.filter((t: Data) => t.status === "done").length} of ${linked.length} linked tasks complete · ${e(m.visibility)}</p>` : ""}${canEdit ? button("Update milestone", `edit-milestone:${m.id}`) : ""}</article>`;
+  });
+  return `<div class="row between" data-layout="layout-2"><div><h2>Plan / Milestones</h2><p class="muted">Concrete checkpoints, linked work, and explicit review.</p></div><div class="row">${canEdit ? button(`${icon("plus")} Add milestone`, "new-milestone", "") : ""}${studio ? button(`${icon("plus")} Add task`, "new-task", "") : ""}</div></div>${milestones.length ? `<div class="grid">${cards.join("")}</div>` : empty("No milestone checkpoints yet.", "The project owner can create a dated checkpoint and choose what to share with clients.")}<div class="divider"></div><h2>Tasks</h2>${list.length ? list.map((t: Data) => `<article class="task"><span>${icon(t.status === "done" ? "check" : "plan")}</span><div class="task-copy"><h3>${e(t.title)}</h3><small>${e(t.milestone)} ${t.depends_on ? "· Has a dependency" : ""}</small><div class="row" data-layout="layout-3">${badge(t.status)}${t.priority === "high" ? badge("high") : ""}</div>${t.evidence ? `<p class="prose muted" data-layout="layout-4">${e(t.evidence)}</p>` : ""}</div>${studio ? button("Update", `edit-task:${t.id}`) : ""}</article>`).join("") : empty("A clear plan starts with one step.", "Tasks and evidence remain available throughout this project.")}`;
 }
 function releases() {
   return `<div class="row between" data-layout="layout-2"><div><h2>${route.surface === "space" ? "Your project versions" : "Delivery / Version records"}</h2><p class="muted">Each review belongs to one immutable version.</p></div>${room!.role === "owner" ? button(`${icon("plus")} Record version`, "new-release", "") : ""}</div>${room!.releases.length ? room!.releases.map((r: Data) => `<article class="card release" data-layout="layout-5"><div class="row between"><h2>${e(r.label)}</h2><small>${date(r.created_at)}</small></div><p class="prose">${e(r.summary)}</p>${route.surface === "studio" ? `<p class="version">Commit ${e(r.commit_sha)}</p><p class="muted">${r.source_evidence?.length ? "Source checked against GitHub. Artifacts and deployment are not verified." : "Source SHA is recorded but not verified against GitHub."}</p>${room!.role === "owner" ? button("Verify GitHub source", `verify-source:${r.id}`) : ""}${(r.source_evidence ?? []).map((v: Data) => `<section class="review"><strong>GitHub source verified</strong><p class="version">${e(v.repository)}<br>Commit ${e(v.commit_sha)}<br>Tree ${e(v.tree_sha)}</p><p>CI observed: ${e(v.ci_state.replaceAll("_", " "))}</p><small>${date(v.observed_at)} · ${e(room!.members.find((m: Data) => m.user_id === v.actor_id)?.name ?? "Project owner")}</small></section>`).join("")}<h3>Rollback</h3><p class="prose muted">${e(r.rollback)}</p>` : ""}<div class="row">${r.demo_url ? `<a class="button secondary" href="${e(r.demo_url)}" target="_blank" rel="noopener noreferrer">Open demonstration ${icon("arrow")}</a>` : ""}${r.artifact_url ? `<a class="button secondary" href="${e(r.artifact_url)}" target="_blank" rel="noopener noreferrer">Open deliverable ${icon("arrow")}</a>` : ""}${r.actor_id !== me!.user.id && !r.reviews.some((v: Data) => v.actor_id === me!.user.id) ? button("Review this version", `review-release:${r.id}`) : ""}</div>${r.reviews.map((v: Data) => `<div class="review"><div class="row"><strong>${e(v.actor)}</strong>${badge(v.outcome)}<small>${date(v.created_at)}</small></div><p class="prose">${e(v.comment)}</p></div>`).join("")}</article>`).join("") : empty("No version has been shared yet.", "Demonstrations and deliverables appear here when the project owner records a version.")}`;
@@ -549,12 +558,25 @@ async function people(project: string) {
     `${data.members.map((m: Data) => `<div class="people-row">${avatar(m.name)}<div class="person"><h3>${e(m.name)}</h3><small>${e(m.email)}${m.expires_at ? ` · access until ${date(m.expires_at)}` : ""}</small><div>${badge(m.revoked_at ? "revoked" : m.role)}</div></div>${data.role === "owner" && m.role !== "owner" && !m.revoked_at ? button("Revoke", `revoke-member:${project}:${m.user_id}`, "danger") + button(m.role === "client" ? "Make contributor" : "Make client", `role-member:${project}:${m.user_id}:${m.role === "client" ? "contributor" : "client"}`) : ""}</div>`).join("")}${pending.map((i: Data) => `<div class="people-row"><div class="person"><strong>${e(i.email)}</strong><br><small>${e(i.role)} · ${i.revoked_at ? "Revoked" : i.accepted_at ? "Accepted" : new Date(i.expires_at) < new Date() ? "Expired" : "Pending"} · expires ${date(i.expires_at)}</small></div>${!i.accepted_at && !i.revoked_at ? button("Revoke", `revoke-invite:${project}:${i.id}`, "danger") : ""}</div>`).join("")}${data.role === "owner" ? button("Create project invitation", `invite:${project}`, "") : ""}`,
   );
 }
+function milestoneForm(m?: Data) {
+  return form(
+    m ? `edit-milestone:${m.id}` : "milestone",
+    field("Milestone title", "title", m?.title ?? "") +
+      textarea("Outcome and acceptance context", "summary", m?.summary ?? "", false) +
+      field("Target date", "target_date", m?.target_date ?? "", "date", false) +
+      select("Milestone status", "status", ["planned", "active", "blocked", "review", "done"], m?.status ?? "planned") +
+      select("Milestone visibility", "visibility", ["internal", "client"], m?.visibility ?? "internal") +
+      `<input type="hidden" name="version" value="${m?.version ?? ""}"><p class="notice">Only shared checkpoints appear in Client Space. A completed milestone does not approve or deploy a release.</p>`,
+    "Save milestone",
+  );
+}
 function taskForm(t?: Data) {
   const p = room!;
   return form(
     t ? `edit-task:${t.id}` : "task",
     field("Task", "title", t?.title ?? "") +
-      field("Milestone", "milestone", t?.milestone ?? "Project") +
+      field("Milestone label (unlinked tasks)", "milestone", t?.milestone ?? "Project") +
+      `<label class="field">Linked milestone<select name="milestone_id"><option value="">No linked milestone</option>${(p.milestones ?? []).map((m: Data) => `<option value="${e(m.id)}" ${t?.milestone_id === m.id ? "selected" : ""}>${e(m.title)}</option>`).join("")}</select></label>` +
       select(
         "Status",
         "status",
@@ -766,6 +788,15 @@ async function action(value: string) {
       }
       break;
     }
+    case "new-milestone":
+      modal("Add a project milestone", milestoneForm());
+      break;
+    case "edit-milestone":
+      modal(
+        "Update project milestone",
+        milestoneForm(room!.milestones.find((x: Data) => x.id === a)),
+      );
+      break;
     case "new-task":
       modal("Add a project task", taskForm());
       break;
@@ -1090,6 +1121,14 @@ async function submit(f: HTMLFormElement) {
         ...data,
         version: room!.project.version,
       });
+      break;
+    case "milestone":
+    case "edit-milestone":
+      await api(
+        `/projects/${route.project}/milestones${a ? "/" + a : ""}`,
+        a ? "PATCH" : "POST",
+        data,
+      );
       break;
     case "task":
     case "edit-task":

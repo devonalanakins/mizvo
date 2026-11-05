@@ -510,6 +510,17 @@ export function application(
         send(res, 200, { ok: true });
         return;
       }
+      const milestone = tail.match(/^\/milestones(?:\/([^/]+))?$/);
+      if (milestone && !client) {
+        if (!milestone[1] && method === "POST") {
+          send(res, 201, d.milestone(user, project, await body(req)));
+          return;
+        }
+        if (milestone[1] && method === "PATCH") {
+          send(res, 200, d.milestone(user, project, await body(req), milestone[1]));
+          return;
+        }
+      }
       if (tail === "/records" && method === "GET") {
         const params = new URL(req.url!, config.origin).searchParams;
         send(

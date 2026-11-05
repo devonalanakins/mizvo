@@ -1621,6 +1621,7 @@ test("release-source migration upgrades an existing V0.5 database without changi
       );
       assert(s.get("SELECT 1 FROM migrations WHERE version=2"));
       assert(s.get("SELECT 1 FROM migrations WHERE version=3"));
+        assert(s.get("SELECT 1 FROM migrations WHERE version=4"));
     } finally {
       s.close();
     }
@@ -1899,6 +1900,90 @@ test("paged filters, cursors and direct records enforce project/client isolation
       ).status,
       404,
     );
+  } finally {
+    await f.stop();
+  }
+});
+
+test("versioned milestones enforce owner rights, project isolation and safe client projection", async () => {
+  const f = await fixture();
+  try {
+    const a = await f.login(f.users.owner.email),
+      client = await f.login(f.users.client.email),
+      other = await f.login(f.users.other.email);
+    const p = (await f.request("/projects", "POST", {
+      name: "Delivery milestones", purpose: "Visible progress."
+    }, a)).value.id;
+    const otherProject = (await f.request("/projects", "POST", {
+      name: "Other", purpose: "Project boundary."
+    }, a)).value.id;
+    const path = "/projects/" + p;
+    const invite = (await f.request(path + "/invitations", "POST", {
+      email: f.users.client.email, role: "client"
+    }, a)).value;
+    assert.equal((await f.request("/invitations/accept", "POST", { token: invite.token }, client)).status, 200);
+    const privateMilestone = await f.request(path + "/milestones", "POST", {
+      title: "PRIVATE_MILESTONE", visibility: "internal"
+    }, a);
+    assert.equal(privateMilestone.status, 201);
+    const shared = await f.request(path + "/milestones", "POST", {
+      title: "Shared acceptance checkpoint", summary: "Verify actual client progress.",
+      visibility: "client", status: "active", target_date: "2026-12-01"
+    }, a);
+    assert.equal(shared.status, 201);
+    assert.equal((await f.request(path + "/milestones", "POST", {
+      title: "Invalid", target_date: "2026-02-31"
+    }, a)).status, 400);
+    assert.equal((await f.request(path + "/milestones", "POST", {
+      title: "Bad", visibility: "client"
+    }, client)).status, 404);
+    assert.equal((await f.request("/space" + path + "/milestones", "POST", {
+      title: "Bad", visibility: "client"
+    }, client)).status, 404);
+    assert.equal((await f.request(path, "GET", undefined, other)).status, 404);
+    let space = await f.request("/space" + path, "GET", undefined, client);
+    assert.equal(space.status, 200);
+    assert.equal(space.value.milestones.length, 1);
+    assert.equal(space.value.milestones[0].title, "Shared acceptance checkpoint");
+    assert(!JSON.stringify(space.value).includes("PRIVATE_MILESTONE"));
+    assert(!JSON.stringify(space.value.milestones).includes("actor_id"));
+    assert(!JSON.stringify(space.value.milestones).includes("visibility"));
+    const linked = await f.request(path + "/tasks", "POST", {
+      title: "Verify user outcome", milestone_id: shared.value.id, visibility: "client"
+    }, a);
+    assert.equal(linked.status, 201);
+    assert.equal((await f.request(path + "/tasks", "POST", {
+      title: "Leaked linkage", milestone_id: privateMilestone.value.id, visibility: "client"
+    }, a)).status, 400);
+    assert.equal((await f.request("/projects/" + otherProject + "/tasks", "POST", {
+      title: "Cross project", milestone_id: shared.value.id
+    }, a)).status, 400);
+    assert.equal((await f.request(path + "/milestones/" + shared.value.id, "PATCH", {
+      title: "Shared acceptance checkpoint", visibility: "internal", status: "active", version: 1
+    }, a)).status, 409);
+    assert.equal((await f.request(path + "/milestones/" + shared.value.id, "PATCH", {
+      title: "Shared acceptance checkpoint", visibility: "client", status: "done", version: 1
+    }, a)).status, 409);
+    let studio = (await f.request(path, "GET", undefined, a)).value;
+    const task = studio.tasks.find((t: any) => t.title === "Verify user outcome");
+    assert.equal(task.milestone_id, shared.value.id);
+    assert.equal((await f.request(path + "/tasks/" + task.id, "PATCH", {
+      ...task, status: "done", evidence: "Reviewed test observation"
+    }, a)).status, 200);
+    assert.equal((await f.request(path + "/milestones/" + shared.value.id, "PATCH", {
+      title: "Completed shared milestone", visibility: "client", status: "done",
+      summary: "Reviewed outcome.", target_date: "2026-12-01", version: 1
+    }, a)).status, 200);
+    assert.equal((await f.request(path + "/milestones/" + shared.value.id, "PATCH", {
+      title: "Stale update", visibility: "client", status: "active", version: 1
+    }, a)).status, 409);
+    space = await f.request("/space" + path, "GET", undefined, client);
+    assert.equal(space.value.milestones[0].status, "done");
+    assert.equal(space.value.tasks.find((t: any) => t.id === task.id).milestone,
+      "Completed shared milestone");
+    assert.equal((await f.request(path + "/tasks", "POST", {
+      title: "Premature reopening", milestone_id: shared.value.id, visibility: "client"
+    }, a)).status, 409);
   } finally {
     await f.stop();
   }
