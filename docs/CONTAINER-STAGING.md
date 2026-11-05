@@ -38,6 +38,8 @@ This uses a local Docker daemon and must run only in an isolated engineering/CI 
 
 The existing `npm run test:staging` and `npm run test:tls` gates remain responsible for user-path rollback and actual TLS/CSRF/client permission checks. The new container test does not replace them.
 
+**Combined integration:** This source branch also includes the previously reviewed V0.9 synthetic staging and V0.10 HTTPS gates, and targets the latest flagship integration PR #7 directly. The required final CI must run against the merged PR #7 + OCI/HTTPS/recovery candidate, including the preview-network security checks. The earlier CI run against only the staging branch is retained as historical evidence, not the combined release gate.
+
 **Evidence and limitations:** a passing CI log proves this source and current Docker engine can build and exercise a private container. It is not proof of a real provider's secure DNS, production TLS, application availability, off-host recovery, cloud account ownership, encryption or commercial compliance. The test checks **volume persistence**, not customer-data export or a production disaster recovery objective.
 
 ## Release and ownership controls
