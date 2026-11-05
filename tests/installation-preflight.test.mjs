@@ -89,8 +89,9 @@ test("installation preflight rejects substitution, tampering and untrusted Git i
       () => verifyInstallation(args),
       /independently trusted digest/,
     );
+    const poisonedManifestSha256 = digest(await readFile(manifest));
     await assert.rejects(
-      () => verifyInstallation({ ...args, trustedManifestSha256: digest(await readFile(manifest)) }),
+      () => verifyInstallation({ ...args, trustedManifestSha256: poisonedManifestSha256 }),
       /commit does not match/,
     );
     await rm(manifest);
