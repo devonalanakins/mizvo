@@ -529,15 +529,27 @@ export function application(
         send(res, 201, d.requestClientDecision(user, project, await body(req)));
         return;
       }
-      const clientDecision = tail.match(/^\/client-decisions\/([^/]+)\/(respond|cancel)$/);
+      const clientDecision = tail.match(
+        /^\/client-decisions\/([^/]+)\/(respond|cancel)$/,
+      );
       if (clientDecision && method === "POST") {
         if (client && clientDecision[2] === "respond") {
-          d.respondClientDecision(user, project, clientDecision[1]!, await body(req));
+          d.respondClientDecision(
+            user,
+            project,
+            clientDecision[1]!,
+            await body(req),
+          );
           send(res, 200, { ok: true });
           return;
         }
         if (!client && clientDecision[2] === "cancel") {
-          d.cancelClientDecision(user, project, clientDecision[1]!, await body(req));
+          d.cancelClientDecision(
+            user,
+            project,
+            clientDecision[1]!,
+            await body(req),
+          );
           send(res, 200, { ok: true });
           return;
         }

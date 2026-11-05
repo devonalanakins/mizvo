@@ -353,7 +353,11 @@ export class Domain {
   }
   requestClientDecision(user: string, project: string, b: Row) {
     const grant = owner(this.s, project, user);
-    assert(grant.organization_id === this.organization, 404, "Project not found.");
+    assert(
+      grant.organization_id === this.organization,
+      404,
+      "Project not found.",
+    );
     const recipient = text(b.client_id, "Client", 100),
       title = text(b.title, "Decision request title", 200),
       body = text(b.body, "Decision request", 6000);
@@ -365,10 +369,18 @@ export class Domain {
         now(),
       );
       assert(active, 400, "Select a client with active project access.");
-      const request = id(), stamp = now();
+      const request = id(),
+        stamp = now();
       this.s.run(
         "INSERT INTO client_decision_requests(id,project_id,client_id,actor_id,title,body,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-        request, project, recipient, user, title, body, stamp, stamp,
+        request,
+        project,
+        recipient,
+        user,
+        title,
+        body,
+        stamp,
+        stamp,
       );
       this.audit(project, user, "client_decision.requested", request);
       return { id: request };
@@ -376,49 +388,87 @@ export class Domain {
   }
   cancelClientDecision(user: string, project: string, request: string, b: Row) {
     const grant = owner(this.s, project, user);
-    assert(grant.organization_id === this.organization, 404, "Project not found.");
+    assert(
+      grant.organization_id === this.organization,
+      404,
+      "Project not found.",
+    );
     this.s.transaction(() => {
       const target = this.s.get(
         "SELECT id FROM client_decision_requests WHERE id=? AND project_id=?",
-        request, project,
+        request,
+        project,
       );
       assert(target, 404, "Decision request not found.");
       const updated = this.s.run(
         "UPDATE client_decision_requests SET status='cancelled',version=version+1,updated_at=? WHERE id=? AND project_id=? AND status='pending' AND version=?",
-        now(), request, project, version(b.version),
+        now(),
+        request,
+        project,
+        version(b.version),
       );
-      assert(updated.changes, 409, "Request changed or already has a response.");
+      assert(
+        updated.changes,
+        409,
+        "Request changed or already has a response.",
+      );
       this.audit(project, user, "client_decision.cancelled", request);
     });
   }
-  respondClientDecision(user: string, project: string, request: string, b: Row) {
+  respondClientDecision(
+    user: string,
+    project: string,
+    request: string,
+    b: Row,
+  ) {
     const grant = membership(this.s, project, user);
     assert(
       grant.organization_id === this.organization && grant.role === "client",
-      404, "Project not found.",
+      404,
+      "Project not found.",
     );
     const outcome = choice(
-      b.outcome, ["accepted", "changes_requested"], "client outcome",
-    ), comment = text(b.comment, "Client response", 2000),
+        b.outcome,
+        ["accepted", "changes_requested"],
+        "client outcome",
+      ),
+      comment = text(b.comment, "Client response", 2000),
       expected = version(b.version);
     this.s.transaction(() => {
       const r = this.s.get(
         "SELECT version,status FROM client_decision_requests WHERE id=? AND project_id=? AND client_id=?",
-        request, project, user,
+        request,
+        project,
+        user,
       );
       assert(r, 404, "Decision request not found.");
       assert(
         r.status === "pending" && r.version === expected,
-        409, "This exact request has changed or already been answered.",
+        409,
+        "This exact request has changed or already been answered.",
       );
       const updated = this.s.run(
         "UPDATE client_decision_requests SET status='answered',version=version+1,updated_at=? WHERE id=? AND project_id=? AND client_id=? AND version=? AND status='pending'",
-        now(), request, project, user, expected,
+        now(),
+        request,
+        project,
+        user,
+        expected,
       );
-      assert(updated.changes, 409, "Decision request changed. Reload before responding.");
+      assert(
+        updated.changes,
+        409,
+        "Decision request changed. Reload before responding.",
+      );
       this.s.run(
         "INSERT INTO client_decision_responses(id,request_id,client_id,request_version,outcome,comment,created_at) VALUES (?,?,?,?,?,?,?)",
-        id(), request, user, expected, outcome, comment, now(),
+        id(),
+        request,
+        user,
+        expected,
+        outcome,
+        comment,
+        now(),
       );
       this.audit(project, user, "client_decision.answered", request);
     });

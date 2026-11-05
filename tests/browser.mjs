@@ -364,13 +364,20 @@ try {
   await capture(client, "client-milestones", 390);
   await page.goto(config.origin + `/studio/projects/${project}?tab=decisions`);
   await page.getByRole("button", { name: "Request client decision" }).click();
-  await page.getByLabel("Decision title").fill("Approve the onboarding description");
-  await page.getByLabel("What exactly needs their decision?")
+  await page
+    .getByLabel("Decision title")
+    .fill("Approve the onboarding description");
+  await page
+    .getByLabel("What exactly needs their decision?")
     .fill("Is this explanation clear and useful?");
   await page.getByRole("button", { name: "Request decision" }).click();
-  await page.getByRole("heading", { name: "Approve the onboarding description" }).waitFor();
+  await page
+    .getByRole("heading", { name: "Approve the onboarding description" })
+    .waitFor();
   await client.goto(config.origin + `/space/projects/${project}?tab=decisions`);
-  await client.getByRole("heading", { name: "Approve the onboarding description" }).waitFor();
+  await client
+    .getByRole("heading", { name: "Approve the onboarding description" })
+    .waitFor();
   await capture(client, "client-decisions", 390);
   await client.getByRole("button", { name: "Respond to request" }).click();
   await client.getByLabel("Your decision").selectOption("accepted");

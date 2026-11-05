@@ -343,14 +343,21 @@ function tasks() {
 function clientDecisionView() {
   const client = route.surface === "space",
     list = room!.client_decisions ?? [],
-    eligible = client ? [] : room!.members.filter(
-      (m: Data) => m.role === "client" && !m.revoked_at &&
-        (!m.expires_at || new Date(m.expires_at) > new Date()),
-    ),
+    eligible = client
+      ? []
+      : room!.members.filter(
+          (m: Data) =>
+            m.role === "client" &&
+            !m.revoked_at &&
+            (!m.expires_at || new Date(m.expires_at) > new Date()),
+        ),
     canRequest = !client && room!.role === "owner" && eligible.length > 0;
-  const cards = list.map((d: Data) =>
-    `<article class="card"><div class="row between"><h3>${e(d.title)}</h3>${badge(d.status)}</div>${client ? "" : `<p class="muted">For ${e(d.recipient)}</p>`}<p class="prose">${e(d.body)}</p><small>Requested ${date(d.created_at)}</small>${d.outcome ? `<div class="review"><strong>${e(d.outcome.replaceAll("_", " "))}</strong><p class="prose">${e(d.comment)}</p><small>${date(d.answered_at)}</small></div>` : ""}${client && d.status === "pending" ? button("Respond to request", `respond-client-decision:${d.id}`, "") : ""}${!client && room!.role === "owner" && d.status === "pending" ? button("Cancel pending request", `cancel-client-decision:${d.id}`) : ""}</article>`
-  ).join("");
+  const cards = list
+    .map(
+      (d: Data) =>
+        `<article class="card"><div class="row between"><h3>${e(d.title)}</h3>${badge(d.status)}</div>${client ? "" : `<p class="muted">For ${e(d.recipient)}</p>`}<p class="prose">${e(d.body)}</p><small>Requested ${date(d.created_at)}</small>${d.outcome ? `<div class="review"><strong>${e(d.outcome.replaceAll("_", " "))}</strong><p class="prose">${e(d.comment)}</p><small>${date(d.answered_at)}</small></div>` : ""}${client && d.status === "pending" ? button("Respond to request", `respond-client-decision:${d.id}`, "") : ""}${!client && room!.role === "owner" && d.status === "pending" ? button("Cancel pending request", `cancel-client-decision:${d.id}`) : ""}</article>`,
+    )
+    .join("");
   return `<div class="row between" data-layout="layout-2"><div><h2>${client ? "Your decisions" : "Client decision requests"}</h2><p class="muted">Responses belong to a named client and an exact request. They never approve engineering releases or create contracts.</p></div>${canRequest ? button("Request client decision", "new-client-decision", "") : ""}</div>${!client && room!.role === "owner" && !eligible.length ? `<p class="muted">Invite a client and confirm their project access before requesting a decision.</p>` : ""}<div class="stack">${list.length ? cards : empty("No client decisions yet.", client ? "A requested decision will appear here when Mizvo asks for your response." : "A decision request creates a durable record for a specific client.")}</div>`;
 }
 function releases() {
@@ -576,7 +583,9 @@ async function people(project: string) {
 }
 function clientDecisionForm() {
   const active = room!.members.filter(
-    (m: Data) => m.role === "client" && !m.revoked_at &&
+    (m: Data) =>
+      m.role === "client" &&
+      !m.revoked_at &&
       (!m.expires_at || new Date(m.expires_at) > new Date()),
   );
   return form(
@@ -852,12 +861,19 @@ async function action(value: string) {
       break;
     case "respond-client-decision": {
       const request = room!.client_decisions.find((x: Data) => x.id === a);
-      modal("Respond to a decision request", clientDecisionResponseForm(request));
+      modal(
+        "Respond to a decision request",
+        clientDecisionResponseForm(request),
+      );
       break;
     }
     case "cancel-client-decision": {
       const request = room!.client_decisions.find((x: Data) => x.id === a);
-      if (confirm("Cancel this pending client request? Its record remains visible.")) {
+      if (
+        confirm(
+          "Cancel this pending client request? Its record remains visible.",
+        )
+      ) {
         await api(
           `/projects/${route.project}/client-decisions/${a}/cancel`,
           "POST",
