@@ -2,14 +2,26 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, cp } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+  cp,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { verifyInstallation } from "../scripts/installation-preflight.mjs";
 
 const repository = "devonalanakins/mizvo";
-const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim();
+const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
+const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], {
+  encoding: "utf8",
+}).trim();
 const digest = (data) => createHash("sha256").update(data).digest("hex");
 
 test("installation preflight rejects substitution, tampering and untrusted Git identities", async () => {
@@ -27,7 +39,11 @@ test("installation preflight rejects substitution, tampering and untrusted Git i
       ["scripts/artifact-proof.mjs", "create", dist, manifest],
       {
         cwd: process.cwd(),
-        env: { ...process.env, GITHUB_REPOSITORY: repository, GITHUB_SHA: commit },
+        env: {
+          ...process.env,
+          GITHUB_REPOSITORY: repository,
+          GITHUB_SHA: commit,
+        },
         encoding: "utf8",
         timeout: 30000,
       },
@@ -53,7 +69,8 @@ test("installation preflight rejects substitution, tampering and untrusted Git i
     assert.equal(proof.files_verified, 2);
 
     await assert.rejects(
-      () => verifyInstallation({ ...args, trustedManifestSha256: "f".repeat(64) }),
+      () =>
+        verifyInstallation({ ...args, trustedManifestSha256: "f".repeat(64) }),
       /independently trusted digest/,
     );
     await assert.rejects(
@@ -65,21 +82,34 @@ test("installation preflight rejects substitution, tampering and untrusted Git i
       /tree does not match/,
     );
     await assert.rejects(
-      () => verifyInstallation({ ...args, expectedRepository: "attacker/example" }),
+      () =>
+        verifyInstallation({ ...args, expectedRepository: "attacker/example" }),
       /repository does not match/,
     );
 
     await writeFile(file, "console.log('tampered');\n");
-    await assert.rejects(() => verifyInstallation(args), /exact-byte verification/);
+    await assert.rejects(
+      () => verifyInstallation(args),
+      /exact-byte verification/,
+    );
     await writeFile(file, "console.log('reviewed');\n");
     await writeFile(join(dist, "unexpected.txt"), "not in manifest");
-    await assert.rejects(() => verifyInstallation(args), /exact-byte verification/);
+    await assert.rejects(
+      () => verifyInstallation(args),
+      /exact-byte verification/,
+    );
     await rm(join(dist, "unexpected.txt"));
     await rm(file);
-    await assert.rejects(() => verifyInstallation(args), /exact-byte verification/);
+    await assert.rejects(
+      () => verifyInstallation(args),
+      /exact-byte verification/,
+    );
     await writeFile(file, "console.log('reviewed');\n");
     await symlink(file, join(dist, "unsafe-link"));
-    await assert.rejects(() => verifyInstallation(args), /exact-byte verification/);
+    await assert.rejects(
+      () => verifyInstallation(args),
+      /exact-byte verification/,
+    );
     await rm(join(dist, "unsafe-link"));
 
     const altered = JSON.parse(raw.toString("utf8"));
@@ -91,12 +121,19 @@ test("installation preflight rejects substitution, tampering and untrusted Git i
     );
     const poisonedManifestSha256 = digest(await readFile(manifest));
     await assert.rejects(
-      () => verifyInstallation({ ...args, trustedManifestSha256: poisonedManifestSha256 }),
+      () =>
+        verifyInstallation({
+          ...args,
+          trustedManifestSha256: poisonedManifestSha256,
+        }),
       /commit does not match/,
     );
     await rm(manifest);
     await symlink(file, manifest);
-    await assert.rejects(() => verifyInstallation(args), /Manifest must be a regular file/);
+    await assert.rejects(
+      () => verifyInstallation(args),
+      /Manifest must be a regular file/,
+    );
   } finally {
     await rm(work, { recursive: true, force: true });
   }

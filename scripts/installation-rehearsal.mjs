@@ -11,7 +11,11 @@ const evidence = resolve("docs/evidence/installation-preflight.json");
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 async function main() {
-  assert.equal(process.argv.length, 2, "Synthetic installation test accepts no arguments.");
+  assert.equal(
+    process.argv.length,
+    2,
+    "Synthetic installation test accepts no arguments.",
+  );
   const expectedRepository = process.env.GITHUB_REPOSITORY;
   assert.equal(
     expectedRepository,
@@ -86,6 +90,8 @@ async function main() {
 try {
   await main();
 } catch {
-  console.error("FAIL: synthetic installation preflight. No candidate is approved.");
+  console.error(
+    "FAIL: synthetic installation preflight. No candidate is approved.",
+  );
   process.exitCode = 1;
 }

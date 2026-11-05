@@ -31,21 +31,36 @@ export async function verifyInstallation({
   expectedTree,
   expectedRepository,
 }) {
-  check(HASH.test(trustedManifestSha256), "Expected a trusted 64-character manifest digest.");
+  check(
+    HASH.test(trustedManifestSha256),
+    "Expected a trusted 64-character manifest digest.",
+  );
   check(
     GIT_SHA.test(expectedCommit) && GIT_SHA.test(expectedTree),
     "Expected exact Git commit and tree identifiers.",
   );
-  check(REPOSITORY.test(expectedRepository), "Expected an exact trusted repository identifier.");
+  check(
+    REPOSITORY.test(expectedRepository),
+    "Expected an exact trusted repository identifier.",
+  );
   const directory = resolve(distribution);
   const manifestPath = resolve(manifest);
   const [directoryStat, manifestStat] = await Promise.all([
     lstat(directory),
     lstat(manifestPath),
   ]);
-  check(directoryStat.isDirectory() && !directoryStat.isSymbolicLink(), "Candidate root must be a real directory.");
-  check(manifestStat.isFile() && !manifestStat.isSymbolicLink(), "Manifest must be a regular file.");
-  check(manifestStat.size > 0 && manifestStat.size <= MAX_MANIFEST, "Manifest size is invalid.");
+  check(
+    directoryStat.isDirectory() && !directoryStat.isSymbolicLink(),
+    "Candidate root must be a real directory.",
+  );
+  check(
+    manifestStat.isFile() && !manifestStat.isSymbolicLink(),
+    "Manifest must be a regular file.",
+  );
+  check(
+    manifestStat.size > 0 && manifestStat.size <= MAX_MANIFEST,
+    "Manifest size is invalid.",
+  );
   const raw = await readFile(manifestPath);
   check(raw.length === manifestStat.size, "Manifest changed while being read.");
   check(
@@ -59,16 +74,30 @@ export async function verifyInstallation({
     throw new Error("Manifest is not valid JSON.");
   }
   check(parsed && parsed.schema === FORMAT, "Unsupported manifest schema.");
-  check(parsed.source?.repository === expectedRepository, "Manifest repository does not match the approved repository.");
-  check(parsed.source?.checkout_commit === expectedCommit, "Manifest commit does not match the approved checkout.");
-  check(parsed.source?.checkout_tree === expectedTree, "Manifest tree does not match the approved source tree.");
-  const trustedVerifier = fileURLToPath(new URL("./artifact-proof.mjs", import.meta.url));
+  check(
+    parsed.source?.repository === expectedRepository,
+    "Manifest repository does not match the approved repository.",
+  );
+  check(
+    parsed.source?.checkout_commit === expectedCommit,
+    "Manifest commit does not match the approved checkout.",
+  );
+  check(
+    parsed.source?.checkout_tree === expectedTree,
+    "Manifest tree does not match the approved source tree.",
+  );
+  const trustedVerifier = fileURLToPath(
+    new URL("./artifact-proof.mjs", import.meta.url),
+  );
   const result = spawnSync(
     process.execPath,
     [trustedVerifier, "verify", directory, manifestPath],
     { encoding: "utf8", timeout: 60000, maxBuffer: 32 * 1024 },
   );
-  check(result.status === 0, "Installed files or manifest failed exact-byte verification.");
+  check(
+    result.status === 0,
+    "Installed files or manifest failed exact-byte verification.",
+  );
   return {
     schema: "mizvo.installation-preflight.v1",
     checkout_commit: expectedCommit,
@@ -100,10 +129,13 @@ if (invocation === fileURLToPath(import.meta.url)) {
         expectedRepository: args[5],
       });
       console.log(
-        "PASS: " + receipt.files_verified +
-        " installed candidate files matched trusted manifest and exact Git identity.",
+        "PASS: " +
+          receipt.files_verified +
+          " installed candidate files matched trusted manifest and exact Git identity.",
       );
-      console.log("Not a signature, live-process attestation, or deployment approval.");
+      console.log(
+        "Not a signature, live-process attestation, or deployment approval.",
+      );
     } catch (error) {
       console.error("Installation preflight failed: " + error.message);
       process.exitCode = 1;
