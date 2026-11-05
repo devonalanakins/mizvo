@@ -72,17 +72,35 @@ export function application(
     res.end(JSON.stringify(value));
   };
   async function body(req: IncomingMessage): Promise<Row> {
+    const maxBytes = 32 * 1024;
+    const contentType = req.headers["content-type"]
+      ?.split(";")[0]
+      ?.trim()
+      .toLowerCase();
+    assert(contentType === "application/json", 415, "Use JSON.");
+    const encoding = req.headers["content-encoding"];
     assert(
-      req.headers["content-type"]?.startsWith("application/json"),
+      !encoding || encoding.toLowerCase() === "identity",
       415,
-      "Use JSON.",
+      "Unsupported content encoding.",
     );
-    let raw = "";
+    const declaredLength = req.headers["content-length"];
+    if (declaredLength !== undefined) {
+      assert(/^\d+$/.test(declaredLength), 400, "Invalid content length.");
+      assert(Number(declaredLength) <= maxBytes, 413, "Request too large.");
+    }
+    let bytes = 0;
+    const chunks: Buffer[] = [];
     for await (const chunk of req) {
-      raw += chunk;
-      assert(raw.length <= 32768, 413, "Request too large.");
+      const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += part.byteLength;
+      assert(bytes <= maxBytes, 413, "Request too large.");
+      chunks.push(part);
     }
     try {
+      const raw = new TextDecoder("utf-8", { fatal: true }).decode(
+        Buffer.concat(chunks, bytes),
+      );
       const value = JSON.parse(raw || "{}");
       assert(
         value && typeof value === "object" && !Array.isArray(value),
