@@ -222,7 +222,7 @@ export class Domain {
         )
         .map((r) => [r.user_id, r.name]),
     );
-    const tasks = this.s
+    const tasks: Row[] = this.s
       .all(
         `SELECT * FROM tasks WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at,id`,
         project,
