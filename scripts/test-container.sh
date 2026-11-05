@@ -17,6 +17,29 @@ trap cleanup EXIT
 docker build --file Dockerfile --tag "$image" .
 MIZVO_ORIGIN=https://staging.example.invalid docker compose -f compose.staging.yaml config --quiet
 
+# A public container bind must fail closed for an untrusted address or
+# missing production HTTPS origin. Prevent a hanging broken server from
+# accidentally looking like a successful rejection.
+expect_rejected_start() {
+  local expected="$1" output status
+  shift
+  set +e
+  output="$(timeout 8s docker run --rm --network none "$@" "$image" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -eq 0 || "$status" -eq 124 || "$output" != *"$expected"* ]]; then
+    echo "FAIL: container network binding guard did not reject unsafe configuration" >&2
+    exit 1
+  fi
+}
+
+expect_rejected_start "Production requires an HTTPS origin." \
+  -e MIZVO_ORIGIN=http://localhost:4173
+expect_rejected_start "Container network binding requires production HTTPS origin." \
+  -e NODE_ENV=test -e MIZVO_ORIGIN=http://localhost:4173
+expect_rejected_start "Unsupported bind address." \
+  -e MIZVO_ORIGIN=https://staging.example.invalid -e MIZVO_BIND_HOST=192.0.2.1
+
 docker volume create "$volume" >/dev/null
 
 start_container() {
