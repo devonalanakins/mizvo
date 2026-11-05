@@ -884,8 +884,17 @@ if (
       .map((s) => s.trim())
       .filter(Boolean),
   });
-  app.server.listen(port, "127.0.0.1", () =>
-    console.log(`Mizvo listening at http://localhost:${port}`),
+  const bindHost = process.env.MIZVO_BIND_HOST ?? "127.0.0.1";
+  if (bindHost !== "127.0.0.1" && bindHost !== "0.0.0.0")
+    throw new Error("Unsupported bind address.");
+  if (
+    bindHost === "0.0.0.0" &&
+    (process.env.NODE_ENV !== "production" ||
+      !process.env.MIZVO_ORIGIN?.startsWith("https://"))
+  )
+    throw new Error("Container network binding requires production HTTPS origin.");
+  app.server.listen(port, bindHost, () =>
+    console.log(`Mizvo listening on ${bindHost}:${port}`),
   );
   const stop = () => {
     app.server.close(() => {
