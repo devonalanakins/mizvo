@@ -20,7 +20,8 @@ test("HTTP JSON ingestion enforces raw byte limits and strict UTF-8 without data
   await once(app.server, "listening");
   const address = app.server.address();
   assert(address && typeof address !== "string");
-  const localOrigin = origin + ":" + address.port;
+  const port = address.port;
+  const localOrigin = origin + ":" + port;
   config.origin = localOrigin;
   // The application validates Origin against the configured public URL.
   // Keep it the same as the loopback test request.
@@ -33,37 +34,39 @@ test("HTTP JSON ingestion enforces raw byte limits and strict UTF-8 without data
     padding: "",
   };
   async function post(parts: Buffer[], options: Record<string, string> = {}) {
-    return await new Promise<{ status: number; body: any }>((resolve, reject) => {
-      const req = httpRequest(
-        {
-          hostname: "127.0.0.1",
-          port: address.port,
-          path: endpoint,
-          method: "POST",
-          headers: {
-            Origin: localOrigin,
-            "Content-Type": "application/json",
-            Connection: "close",
-            ...options,
+    return await new Promise<{ status: number; body: any }>(
+      (resolve, reject) => {
+        const req = httpRequest(
+          {
+            hostname: "127.0.0.1",
+            port,
+            path: endpoint,
+            method: "POST",
+            headers: {
+              Origin: localOrigin,
+              "Content-Type": "application/json",
+              Connection: "close",
+              ...options,
+            },
           },
-        },
-        (res) => {
-          const data: Buffer[] = [];
-          res.on("data", (chunk: Buffer) => data.push(chunk));
-          res.on("error", reject);
-          res.on("end", () => {
-            const text = Buffer.concat(data).toString("utf8");
-            resolve({
-              status: res.statusCode ?? 0,
-              body: text ? JSON.parse(text) : null,
+          (res) => {
+            const data: Buffer[] = [];
+            res.on("data", (chunk: Buffer) => data.push(chunk));
+            res.on("error", reject);
+            res.on("end", () => {
+              const text = Buffer.concat(data).toString("utf8");
+              resolve({
+                status: res.statusCode ?? 0,
+                body: text ? JSON.parse(text) : null,
+              });
             });
-          });
-        },
-      );
-      req.on("error", reject);
-      for (const part of parts) req.write(part);
-      req.end();
-    });
+          },
+        );
+        req.on("error", reject);
+        for (const part of parts) req.write(part);
+        req.end();
+      },
+    );
   }
   try {
     // The old string-length check erroneously accepted more than 32 KiB of

@@ -87,11 +87,7 @@ export function application(
     const declaredLength = req.headers["content-length"];
     if (declaredLength !== undefined) {
       assert(/^\d+$/.test(declaredLength), 400, "Invalid content length.");
-      assert(
-        Number(declaredLength) <= maxBytes,
-        413,
-        "Request too large.",
-      );
+      assert(Number(declaredLength) <= maxBytes, 413, "Request too large.");
     }
     let bytes = 0;
     const chunks: Buffer[] = [];
