@@ -892,7 +892,9 @@ if (
     (process.env.NODE_ENV !== "production" ||
       !process.env.MIZVO_ORIGIN?.startsWith("https://"))
   )
-    throw new Error("Container network binding requires production HTTPS origin.");
+    throw new Error(
+      "Container network binding requires production HTTPS origin.",
+    );
   app.server.listen(port, bindHost, () =>
     console.log(`Mizvo listening on ${bindHost}:${port}`),
   );
