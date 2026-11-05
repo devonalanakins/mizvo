@@ -28,7 +28,9 @@ test("fictional local review launches real role-scoped HTTP and deletes its data
         method,
         headers: {
           Origin: review.origin,
-          ...(payload === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(payload === undefined
+            ? {}
+            : { "Content-Type": "application/json" }),
           ...(session
             ? { Cookie: session.cookie, "X-CSRF-Token": session.csrf }
             : {}),
@@ -65,8 +67,16 @@ test("fictional local review launches real role-scoped HTTP and deletes its data
     assert.equal(founderRoom.status, 200);
     assert.equal(founderRoom.value.role, "owner");
     assert.equal(founderRoom.value.tasks.length, 2);
-    assert(founderRoom.value.tasks.some((task: any) => task.assignee_name === "Fictional Engineer"));
-    assert(founderRoom.value.records.some((record: any) => record.title === "INTERNAL_ONLY_REVIEW_NOTE"));
+    assert(
+      founderRoom.value.tasks.some(
+        (task: any) => task.assignee_name === "Fictional Engineer",
+      ),
+    );
+    assert(
+      founderRoom.value.records.some(
+        (record: any) => record.title === "INTERNAL_ONLY_REVIEW_NOTE",
+      ),
+    );
 
     const engineerRoom = await request(studioPath, "GET", undefined, engineer);
     assert.equal(engineerRoom.status, 200);
@@ -74,17 +84,33 @@ test("fictional local review launches real role-scoped HTTP and deletes its data
     const clientRoom = await request(spacePath, "GET", undefined, client);
     assert.equal(clientRoom.status, 200);
     assert.equal(clientRoom.value.role, "client");
-    assert.equal(clientRoom.value.next_client_decision.title, "Is the sample brief clear?");
-    assert(clientRoom.value.records.some((record: any) => record.title === "A shared fictional project update"));
+    assert.equal(
+      clientRoom.value.next_client_decision.title,
+      "Is the sample brief clear?",
+    );
+    assert(
+      clientRoom.value.records.some(
+        (record: any) => record.title === "A shared fictional project update",
+      ),
+    );
     assert.equal(clientRoom.value.tasks.length, 1);
     const projection = JSON.stringify(clientRoom.value);
     assert(!projection.includes("INTERNAL_ONLY_REVIEW_NOTE"));
     assert(!projection.includes("Fictional Engineer"));
     assert(!projection.includes("assignee_id"));
     assert(!projection.includes("due_date"));
-    assert.equal((await request(studioPath, "GET", undefined, client)).status, 404);
-    assert.equal((await request(spacePath, "GET", undefined, engineer)).status, 404);
-    assert.equal((await request(spacePath, "GET", undefined, owner)).status, 404);
+    assert.equal(
+      (await request(studioPath, "GET", undefined, client)).status,
+      404,
+    );
+    assert.equal(
+      (await request(spacePath, "GET", undefined, engineer)).status,
+      404,
+    );
+    assert.equal(
+      (await request(spacePath, "GET", undefined, owner)).status,
+      404,
+    );
 
     const uninvited = await request("/login", "POST", {
       email: "not-provisioned@review.example.test",
@@ -94,7 +120,11 @@ test("fictional local review launches real role-scoped HTTP and deletes its data
   } finally {
     await review.close();
   }
-  assert.equal(existsSync(review.directory), false, "The SQLite data folder must be deleted.");
+  assert.equal(
+    existsSync(review.directory),
+    false,
+    "The SQLite data folder must be deleted.",
+  );
   await review.close(); // safe repeated cleanup
 });
 
