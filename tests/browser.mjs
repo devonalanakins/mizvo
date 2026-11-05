@@ -147,19 +147,28 @@ try {
   const project = page.url().match(/projects\/([^?]+)/)[1];
   await page.getByRole("link", { name: "Handoff", exact: true }).click();
   await page.getByRole("button", { name: "Prepare an ownership plan" }).click();
-  await page.getByLabel("Proposed hosting arrangement")
+  await page
+    .getByLabel("Proposed hosting arrangement")
     .selectOption("client_owned_mizvo_operated");
   await page.getByLabel("Planned domain (optional)").fill("demo.example.test");
-  await page.getByLabel("Hosting account owner (optional)")
+  await page
+    .getByLabel("Hosting account owner (optional)")
     .fill("Example Organization");
-  await page.getByLabel("Provider billing owner (optional)")
+  await page
+    .getByLabel("Provider billing owner (optional)")
     .fill("Example Organization");
-  await page.getByLabel("Technical operator (optional)").fill("Mizvo (proposed)");
-  await page.getByLabel("Data export and handoff plan (optional)")
+  await page
+    .getByLabel("Technical operator (optional)")
+    .fill("Mizvo (proposed)");
+  await page
+    .getByLabel("Data export and handoff plan (optional)")
     .fill('Portable export. <img src=x onerror="window.xss=true">');
-  await page.getByLabel("Support boundary (optional)")
+  await page
+    .getByLabel("Support boundary (optional)")
     .fill("Business hours only under a separately approved agreement.");
-  await page.getByLabel("Share this plan with the client").selectOption("client");
+  await page
+    .getByLabel("Share this plan with the client")
+    .selectOption("client");
   await page.getByRole("button", { name: "Save ownership plan" }).click();
   await page.getByRole("heading", { name: "Who controls what?" }).waitFor();
   await capture(page, "studio-ownership-plan", 1440);
@@ -346,8 +355,18 @@ try {
   await client.getByRole("link", { name: "Ownership", exact: true }).click();
   await client.getByRole("heading", { name: "Who controls what?" }).waitFor();
   await client.getByText("Client-owned hosting, operated by Mizvo").waitFor();
-  await client.getByText("No account, domain, payment, backup, export, operational access or deployment has been verified", { exact: false }).waitFor();
-  assert.equal(await client.locator('section[aria-label="Hosting and ownership plan"] img').count(), 0);
+  await client
+    .getByText(
+      "No account, domain, payment, backup, export, operational access or deployment has been verified",
+      { exact: false },
+    )
+    .waitFor();
+  assert.equal(
+    await client
+      .locator('section[aria-label="Hosting and ownership plan"] img')
+      .count(),
+    0,
+  );
   assert.equal(await client.evaluate(() => window.xss), undefined);
   await capture(client, "client-ownership-plan", 390);
   await client.getByRole("link", { name: "Overview", exact: true }).click();
