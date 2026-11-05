@@ -236,6 +236,9 @@ async function main() {
       role: "client",
     }, owner);
     assert.equal(typeof invitation.token, "string");
+    // A provisioned identity is not an authorized project member until
+    // the specific one-time invitation is accepted.
+    await firstApi.required("/space/projects/" + project, 404, "GET", undefined, client);
     await firstApi.required("/invitations/accept", 200, "POST", { token: invitation.token }, client);
     const clientBefore = await firstApi.required("/space/projects/" + project, 200, "GET", undefined, client);
     assert.equal(clientBefore.ownership.hosting_model, "client_owned_mizvo_operated");
