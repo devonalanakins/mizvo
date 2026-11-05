@@ -27,7 +27,8 @@ function requireRegularFile(path: string) {
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error("The snapshot must be a regular file, not a symlink.");
   }
-  if (stat.size < 100) throw new Error("The snapshot is not a valid SQLite backup.");
+  if (stat.size < 100)
+    throw new Error("The snapshot is not a valid SQLite backup.");
   return stat.size;
 }
 
@@ -39,7 +40,9 @@ function assertPrivateDirectory(path: string) {
   // The operator explicitly provides an encrypted/restricted work location.
   // For POSIX, never accept group/world-accessible drill directories.
   if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
-    throw new Error("The drill directory must be accessible only to its owner (mode 0700).");
+    throw new Error(
+      "The drill directory must be accessible only to its owner (mode 0700).",
+    );
   }
   if (realpathSync(path) !== resolve(path)) {
     throw new Error("The drill directory must not resolve through symlinks.");
@@ -53,12 +56,16 @@ async function sha256File(path: string): Promise<string> {
 }
 
 function schemaVersions(db: DatabaseSync): number[] {
-  const directory = fileURLToPath(new URL("../packages/storage/", import.meta.url));
+  const directory = fileURLToPath(
+    new URL("../packages/storage/", import.meta.url),
+  );
   const files = readdirSync(directory)
     .filter((name) => /^\d{3}-.+\.sql$/.test(name))
     .sort();
   const rows = db
-    .prepare("SELECT version,checksum FROM migration_checksums ORDER BY version")
+    .prepare(
+      "SELECT version,checksum FROM migration_checksums ORDER BY version",
+    )
     .all() as { version: number; checksum: string }[];
   const applied = db
     .prepare("SELECT version FROM migrations ORDER BY version")
@@ -77,7 +84,9 @@ function schemaVersions(db: DatabaseSync): number[] {
       applied[i]?.version !== version ||
       rows[i]?.checksum !== hash
     ) {
-      throw new Error("Snapshot migration checksum/version does not match this build.");
+      throw new Error(
+        "Snapshot migration checksum/version does not match this build.",
+      );
     }
   }
   return rows.map((row) => row.version);
@@ -120,14 +129,18 @@ function examine(db: DatabaseSync) {
 
 async function drill(snapshotInput: string, privateInput: string) {
   if (!isAbsolute(snapshotInput) || !isAbsolute(privateInput)) {
-    throw new Error("Use absolute paths for the snapshot and private drill location.");
+    throw new Error(
+      "Use absolute paths for the snapshot and private drill location.",
+    );
   }
   const snapshot = resolve(snapshotInput);
   const privateRoot = resolve(privateInput);
   requireRegularFile(snapshot);
   assertPrivateDirectory(privateRoot);
   if (existsSync(snapshot + "-wal") || existsSync(snapshot + "-shm")) {
-    throw new Error("Snapshot has SQLite sidecars; use the online backup command first.");
+    throw new Error(
+      "Snapshot has SQLite sidecars; use the online backup command first.",
+    );
   }
   const snapshotShaBefore = await sha256File(snapshot);
   const bytes = requireRegularFile(snapshot);
@@ -145,7 +158,9 @@ async function drill(snapshotInput: string, privateInput: string) {
       snapshotShaBefore !== sourceShaAfter ||
       snapshotShaBefore !== isolatedSha
     ) {
-      throw new Error("Snapshot changed during copying or isolated copy differs.");
+      throw new Error(
+        "Snapshot changed during copying or isolated copy differs.",
+      );
     }
 
     // This is an isolated copy, never the source. No schema migration runs here.
@@ -164,11 +179,13 @@ async function drill(snapshotInput: string, privateInput: string) {
         restored.exec("ROLLBACK");
         throw err;
       }
-      const count = restored.prepare("SELECT COUNT(*) AS count FROM sessions").get() as
-        | { count: number }
-        | undefined;
+      const count = restored
+        .prepare("SELECT COUNT(*) AS count FROM sessions")
+        .get() as { count: number } | undefined;
       if (count?.count !== 0) {
-        throw new Error("Recovered sessions were not invalidated in the drill.");
+        throw new Error(
+          "Recovered sessions were not invalidated in the drill.",
+        );
       }
       examine(restored);
     } finally {
@@ -178,7 +195,8 @@ async function drill(snapshotInput: string, privateInput: string) {
     const receipt = {
       schema: "mizvo.isolated-recovery-drill.v1",
       observed_at: new Date().toISOString(),
-      scope: "Single local SQLite installation snapshot; independent rehearsal only.",
+      scope:
+        "Single local SQLite installation snapshot; independent rehearsal only.",
       snapshot_sha256: snapshotShaBefore,
       copied_snapshot_sha256: isolatedSha,
       snapshot_size_bytes: bytes,
