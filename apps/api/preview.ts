@@ -2,7 +2,6 @@ import { isIP } from "node:net";
 import type { PreviewObservation } from "../../packages/domain/preview-evidence.ts";
 import { assert, now } from "../../packages/authz/security.ts";
 
-
 /**
  * Only installation-admin configured, exact public HTTPS URLs can be probed.
  * A response/header is an observation, NEVER proof of a deployment or its bytes.
