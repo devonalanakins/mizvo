@@ -389,6 +389,16 @@ try {
   await page
     .getByRole("button", { name: "Manage Mizvo verification project" })
     .click();
+  await visit(page, config.origin + `/studio/projects/${project}?tab=plan`);
+  await page.getByRole("button", { name: "Update", exact: true }).click();
+  await page.getByLabel("Assignee").selectOption({ label: "Test Engineer" });
+  await page.getByLabel("Due date").fill("2026-12-31");
+  await page.getByRole("button", { name: "Save task", exact: true }).click();
+  await page.getByText(/Assigned to Test Engineer/).waitFor();
+  await page.getByText(/Due 2026-12-31/).waitFor();
+  await capture(page, "delegated-plan", 390);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("link", { name: "People", exact: true }).click();
   await capture(page, "people", 1440);
   await page.getByRole("button", { name: "Create project invitation" }).click();
   await page.getByLabel("Recipient email").fill("client@example.test");
