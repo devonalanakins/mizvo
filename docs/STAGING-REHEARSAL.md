@@ -36,6 +36,8 @@ The harness accepts **no user-supplied database paths**. It generates a cryptogr
 
 The two releases contain *identical compiled bytes*: this deliberately tests **same-version data recovery**, not schema downgrade or deployment of a previous code version.
 
+**External preview isolation:** This synthetic rehearsal deliberately supplies an empty repository allowlist, an empty preview URL allowlist, and no provider token. Its passing result must not be treated as evidence that any network preview, pinned-DNS observation, or cloud account is reachable; those features retain their own separate adversarial checks in the parent implementation PR. All HTTP calls made by this rehearsal target the ephemeral local process.
+
 ## Evidence and limitations
 
 A passing run writes `docs/evidence/staging-rehearsal.json`, which is uploaded in the regular CI evidence artifact. It contains a test schema, observation timestamp, runtime, binary and snapshot digests, boolean assertions, and explicit limits; it contains no account passwords, cookies, private record values or raw customer data. A partial failure must not create a passing receipt. The test logs a high-level failure rather than secrets.
