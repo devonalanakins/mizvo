@@ -21,6 +21,7 @@
     "recovery:drill": "node scripts/recovery-drill.ts",
     "verify:github": "node scripts/verify-github.ts",
     "test:distribution": "node scripts/verify-distribution.mjs",
+    "test:staging": "node scripts/staging-rehearsal.mjs",
     "verify:all": "node scripts/verify-all.mjs",
     "artifact:create": "node scripts/artifact-proof.mjs create dist build-proof.json",
     "artifact:verify": "node scripts/artifact-proof.mjs verify dist build-proof.json"
