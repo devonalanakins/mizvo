@@ -40,4 +40,6 @@ A production deployment needs an authorized domain and provider, certificate pro
 
 This gate adds no Cloudflare D1/Workers adapter; the Node/SQLite runtime remains a self-hostable application and should not be described as running in Workers.
 
+**Integration boundary:** This change includes the synthetic startup/rollback exercise originally reviewed in draft PR #8, plus this separate HTTPS gate, and now targets Mizvo's current flagship integration PR #7. The final acceptance run must include PR #7's newer DNS-pinned preview observation tests as well as both staging exercises. HTTPS localhost success is independent from whether an external preview endpoint is safe or actually belongs to a client.
+
 See [Self-hosting](SELF-HOSTING.md), [Release and recovery](RELEASE.md), and [Synthetic staging](STAGING-REHEARSAL.md).
