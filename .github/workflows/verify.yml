@@ -16,6 +16,13 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Temporary exact formatting diagnostic, removed after committing source.
+      - name: Report formatted TLS test
+        run: |
+          npx prettier --write scripts/https-staging-rehearsal.mjs
+          echo MIZVO_TLS_FORMAT_BEGIN
+          base64 -w 80 scripts/https-staging-rehearsal.mjs
+          echo MIZVO_TLS_FORMAT_END
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
