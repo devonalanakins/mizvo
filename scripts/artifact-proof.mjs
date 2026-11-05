@@ -34,30 +34,42 @@ function validPath(path) {
 
 async function scan(root) {
   const base = resolve(root);
-  requireValid((await lstat(base)).isDirectory(), "Artifact root must be a real directory.");
+  requireValid(
+    (await lstat(base)).isDirectory(),
+    "Artifact root must be a real directory.",
+  );
   const files = [];
   let total = 0;
 
   async function visit(folder, prefix) {
-    const entries = (await readdir(folder, { withFileTypes: true })).sort((a, b) =>
-      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+    const entries = (await readdir(folder, { withFileTypes: true })).sort(
+      (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
     );
     for (const entry of entries) {
       const path = prefix ? prefix + "/" + entry.name : entry.name;
       requireValid(validPath(path), "Unsafe artifact path.");
       const absolute = join(folder, entry.name);
       const stat = await lstat(absolute);
-      requireValid(!stat.isSymbolicLink(), "Artifact contains a symbolic link.");
+      requireValid(
+        !stat.isSymbolicLink(),
+        "Artifact contains a symbolic link.",
+      );
       if (stat.isDirectory()) {
         await visit(absolute, path);
       } else {
         requireValid(stat.isFile(), "Artifact contains a non-regular file.");
-        requireValid(stat.size <= MAX_FILE_BYTES, "Artifact file exceeds byte limit.");
+        requireValid(
+          stat.size <= MAX_FILE_BYTES,
+          "Artifact file exceeds byte limit.",
+        );
         total += stat.size;
         requireValid(total <= MAX_TOTAL_BYTES, "Artifact exceeds byte limit.");
         requireValid(files.length < MAX_FILES, "Artifact has too many files.");
         const bytes = await readFile(absolute);
-        requireValid(bytes.byteLength === stat.size, "Artifact changed while reading.");
+        requireValid(
+          bytes.byteLength === stat.size,
+          "Artifact changed while reading.",
+        );
         files.push({ path, bytes: bytes.byteLength, sha256: digest(bytes) });
       }
     }
@@ -73,14 +85,23 @@ function commitIdentity() {
     execFileSync("git", ["rev-parse", ...args], { encoding: "utf8" }).trim();
   const checkout_commit = git("HEAD");
   const checkout_tree = git("HEAD^{tree}");
-  requireValid(GIT_SHA.test(checkout_commit) && GIT_SHA.test(checkout_tree), "Invalid Git identity.");
+  requireValid(
+    GIT_SHA.test(checkout_commit) && GIT_SHA.test(checkout_tree),
+    "Invalid Git identity.",
+  );
   const reported = process.env.GITHUB_SHA;
-  requireValid(!reported || reported === checkout_commit, "CI checkout does not match GITHUB_SHA.");
+  requireValid(
+    !reported || reported === checkout_commit,
+    "CI checkout does not match GITHUB_SHA.",
+  );
   return { checkout_commit, checkout_tree };
 }
 
 function validateProof(proof) {
-  requireValid(proof && typeof proof === "object" && !Array.isArray(proof), "Invalid artifact proof.");
+  requireValid(
+    proof && typeof proof === "object" && !Array.isArray(proof),
+    "Invalid artifact proof.",
+  );
   requireValid(proof.schema === FORMAT, "Unknown artifact proof schema.");
   requireValid(
     proof.source &&
@@ -102,9 +123,13 @@ function validateProof(proof) {
   let total = 0;
   for (const item of proof.files) {
     requireValid(
-      item && validPath(item.path) && item.path > previous &&
-        Number.isSafeInteger(item.bytes) && item.bytes >= 0 &&
-        item.bytes <= MAX_FILE_BYTES && HASH.test(item.sha256),
+      item &&
+        validPath(item.path) &&
+        item.path > previous &&
+        Number.isSafeInteger(item.bytes) &&
+        item.bytes >= 0 &&
+        item.bytes <= MAX_FILE_BYTES &&
+        HASH.test(item.sha256),
       "Invalid, repeated or unsafe artifact entry.",
     );
     total += item.bytes;
@@ -136,8 +161,15 @@ async function create(root, location) {
     file_set_sha256: digest(JSON.stringify(files)),
   };
   validateProof(proof);
-  await writeFile(location, JSON.stringify(proof, null, 2) + "\n", { flag: "w" });
-  console.log("Created artifact manifest for " + files.length + " files; checkout " + source.checkout_commit);
+  await writeFile(location, JSON.stringify(proof, null, 2) + "\n", {
+    flag: "w",
+  });
+  console.log(
+    "Created artifact manifest for " +
+      files.length +
+      " files; checkout " +
+      source.checkout_commit,
+  );
 }
 
 async function verify(root, location) {
@@ -146,15 +178,33 @@ async function verify(root, location) {
   const proof = JSON.parse(raw.toString("utf8"));
   validateProof(proof);
   const actual = await scan(root);
-  requireValid(JSON.stringify(actual) === JSON.stringify(proof.files), "Artifact bytes or file set do not match manifest.");
-  console.log("PASS: " + actual.length + " compiled files match the recorded SHA-256 inventory.");
-  console.log("Checkout: " + proof.source.checkout_commit + " (" + proof.source.checkout_tree + ").");
-  console.log("Integrity only: no signature, deployment, or release approval is implied.");
+  requireValid(
+    JSON.stringify(actual) === JSON.stringify(proof.files),
+    "Artifact bytes or file set do not match manifest.",
+  );
+  console.log(
+    "PASS: " +
+      actual.length +
+      " compiled files match the recorded SHA-256 inventory.",
+  );
+  console.log(
+    "Checkout: " +
+      proof.source.checkout_commit +
+      " (" +
+      proof.source.checkout_tree +
+      ").",
+  );
+  console.log(
+    "Integrity only: no signature, deployment, or release approval is implied.",
+  );
 }
 
-const [mode, root = "dist", location = "build-proof.json", extra] = process.argv.slice(2);
+const [mode, root = "dist", location = "build-proof.json", extra] =
+  process.argv.slice(2);
 if (!["create", "verify"].includes(mode) || extra !== undefined) {
-  console.error("Usage: node scripts/artifact-proof.mjs create|verify [dist-directory] [manifest-path]");
+  console.error(
+    "Usage: node scripts/artifact-proof.mjs create|verify [dist-directory] [manifest-path]",
+  );
   process.exitCode = 2;
 } else {
   try {
