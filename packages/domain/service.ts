@@ -224,7 +224,8 @@ export class Domain {
       "SELECT * FROM project_brief_revisions WHERE project_id=? ORDER BY revision DESC",
       project,
     );
-    const shared_brief = brief_revisions.find((r) => r.visibility === "client") ?? null;
+    const shared_brief =
+      brief_revisions.find((r) => r.visibility === "client") ?? null;
     const brief = client ? shared_brief : (brief_revisions[0] ?? null);
     const client_decisions = this.clientDecisions(user, project, client);
     const next_client_decision =
@@ -360,14 +361,22 @@ export class Domain {
   }
   briefRevision(user: string, project: string, b: Row) {
     const access = owner(this.s, project, user);
-    assert(access.organization_id === this.organization, 404, "Project not found.");
+    assert(
+      access.organization_id === this.organization,
+      404,
+      "Project not found.",
+    );
     const problem = text(b.problem, "Problem to solve", 3000),
       audience = text(b.audience, "People affected", 2000),
       outcome = text(b.outcome, "Desired outcome", 3000),
       success = text(b.success_criteria, "How success will be checked", 3000),
       exclusions = text(b.exclusions ?? "", "Outside scope", 3000, 0),
       assumptions = text(b.assumptions ?? "", "Assumptions", 3000, 0),
-      visibility = choice(b.visibility ?? "internal", ["internal", "client"], "visibility"),
+      visibility = choice(
+        b.visibility ?? "internal",
+        ["internal", "client"],
+        "visibility",
+      ),
       base = Number(b.base_revision);
     assert(
       Number.isSafeInteger(base) && base >= 0 && base <= 100000,
@@ -379,18 +388,34 @@ export class Domain {
         "SELECT COALESCE(MAX(revision),0) AS revision FROM project_brief_revisions WHERE project_id=?",
         project,
       )!.revision;
-      assert(latest === base, 409, "Brief changed. Reload before saving another revision.");
-      const key = id(), revision = latest + 1, stamp = now();
+      assert(
+        latest === base,
+        409,
+        "Brief changed. Reload before saving another revision.",
+      );
+      const key = id(),
+        revision = latest + 1,
+        stamp = now();
       this.s.run(
         "INSERT INTO project_brief_revisions(id,project_id,revision,problem,audience,outcome,success_criteria,exclusions,assumptions,visibility,actor_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        key, project, revision, problem, audience, outcome, success, exclusions, assumptions,
-        visibility, user, stamp,
+        key,
+        project,
+        revision,
+        problem,
+        audience,
+        outcome,
+        success,
+        exclusions,
+        assumptions,
+        visibility,
+        user,
+        stamp,
       );
       this.audit(project, user, "brief.revised", key);
       return { id: key, revision };
     });
   }
-  clientDecisions(user: string, project: string, client: boolean) {
+  clientDecisions(user: string, project: string, client: boolean): Row[] {
     const grant = membership(this.s, project, user, !client);
     assert(
       grant.organization_id === this.organization &&
@@ -456,15 +481,26 @@ export class Domain {
         assert(
           this.s.get(
             "SELECT id FROM releases WHERE id=? AND project_id=? AND visibility='client'",
-            releaseId, project,
+            releaseId,
+            project,
           ),
           400,
           "Only a shared release from this project can be reviewed.",
         );
-      const request = id(), stamp = now();
+      const request = id(),
+        stamp = now();
       this.s.run(
         "INSERT INTO client_decision_requests(id,project_id,client_id,actor_id,title,body,created_at,updated_at,brief_revision_id,release_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        request, project, recipient, user, title, body, stamp, stamp, briefId, releaseId,
+        request,
+        project,
+        recipient,
+        user,
+        title,
+        body,
+        stamp,
+        stamp,
+        briefId,
+        releaseId,
       );
       this.audit(project, user, "client_decision.requested", request);
       return { id: request };

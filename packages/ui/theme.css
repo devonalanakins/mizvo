@@ -1487,7 +1487,10 @@ pre {
 }
 .brief-statement {
   max-width: 780px;
-  font: 400 clamp(27px, 3.2vw, 43px)/1.16 Editorial, Georgia, serif;
+  font:
+    400 clamp(27px, 3.2vw, 43px) / 1.16 Editorial,
+    Georgia,
+    serif;
   color: var(--ink);
   margin: 5px 0 24px;
   overflow-wrap: anywhere;
@@ -1507,7 +1510,9 @@ pre {
 .brief-detail h3 {
   margin: 0 0 8px;
   color: var(--copper);
-  font: 600 12px/1.35 Inter, sans-serif;
+  font:
+    600 12px/1.35 Inter,
+    sans-serif;
 }
 .brief-detail p {
   margin: 0;
@@ -1527,7 +1532,10 @@ pre {
 }
 .decision-focus h2 {
   margin: 3px 0 13px;
-  font: 400 clamp(27px, 3vw, 39px)/1.12 Editorial, Georgia, serif;
+  font:
+    400 clamp(27px, 3vw, 39px) / 1.12 Editorial,
+    Georgia,
+    serif;
   overflow-wrap: anywhere;
 }
 .decision-focus .prose {

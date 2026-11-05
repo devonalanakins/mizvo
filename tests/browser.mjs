@@ -364,29 +364,41 @@ try {
   await capture(client, "client-milestones", 390);
   await page.goto(config.origin + `/studio/projects/${project}?tab=room`);
   await page.getByRole("button", { name: "Create Living Brief" }).click();
-  await page.getByLabel("What problem are we solving?").fill(
-    "A confusing onboarding experience. <img src=x onerror=alert(1)>",
-  );
-  await page.getByLabel("Who needs it to work?").fill("First-time facilitators using a phone.");
-  await page.getByLabel("What outcome should it achieve?").fill(
-    "A facilitator can start a briefing confidently on a phone.",
-  );
-  await page.getByLabel("How will we know it works?").fill(
-    "Run a successful independent rehearsal.",
-  );
-  await page.getByLabel("What's outside this scope?").fill("Not a paid deployment or contract.");
-  await page.getByLabel("What assumptions need validation?").fill("Actual phone testing.");
-  await page.getByLabel("Share this revision with clients").selectOption("client");
+  await page
+    .getByLabel("What problem are we solving?")
+    .fill("A confusing onboarding experience. <img src=x onerror=alert(1)>");
+  await page
+    .getByLabel("Who needs it to work?")
+    .fill("First-time facilitators using a phone.");
+  await page
+    .getByLabel("What outcome should it achieve?")
+    .fill("A facilitator can start a briefing confidently on a phone.");
+  await page
+    .getByLabel("How will we know it works?")
+    .fill("Run a successful independent rehearsal.");
+  await page
+    .getByLabel("What's outside this scope?")
+    .fill("Not a paid deployment or contract.");
+  await page
+    .getByLabel("What assumptions need validation?")
+    .fill("Actual phone testing.");
+  await page
+    .getByLabel("Share this revision with clients")
+    .selectOption("client");
   await page.getByRole("button", { name: "Save new brief revision" }).click();
-  await page.getByRole("heading", {
-    name: "A facilitator can start a briefing confidently on a phone.",
-  }).waitFor();
+  await page
+    .getByRole("heading", {
+      name: "A facilitator can start a briefing confidently on a phone.",
+    })
+    .waitFor();
   await capture(page, "studio-living-brief", 1440);
   await client.goto(config.origin + `/space/projects/${project}`);
   await client.getByText("Your shared Living Brief").waitFor();
-  await client.getByRole("heading", {
-    name: "A facilitator can start a briefing confidently on a phone.",
-  }).waitFor();
+  await client
+    .getByRole("heading", {
+      name: "A facilitator can start a briefing confidently on a phone.",
+    })
+    .waitFor();
   assert.equal(await client.locator(".living-brief img").count(), 0);
   await capture(client, "client-living-brief", 390);
   await page.goto(config.origin + `/studio/projects/${project}?tab=decisions`);

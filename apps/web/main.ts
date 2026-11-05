@@ -341,7 +341,8 @@ function tasks() {
   return `<div class="row between" data-layout="layout-2"><div><h2>Plan / Milestones</h2><p class="muted">Concrete checkpoints, linked work, and explicit review.</p></div><div class="row">${canEdit ? button(`${icon("plus")} Add milestone`, "new-milestone", "") : ""}${studio ? button(`${icon("plus")} Add task`, "new-task", "") : ""}</div></div>${milestones.length ? `<div class="grid">${cards.join("")}</div>` : empty("No milestone checkpoints yet.", "The project owner can create a dated checkpoint and choose what to share with clients.")}<div class="divider"></div><h2>Tasks</h2>${list.length ? list.map((t: Data) => `<article class="task"><span>${icon(t.status === "done" ? "check" : "plan")}</span><div class="task-copy"><h3>${e(t.title)}</h3><small>${e(t.milestone)} ${t.depends_on ? "· Has a dependency" : ""}</small><div class="row" data-layout="layout-3">${badge(t.status)}${t.priority === "high" ? badge("high") : ""}</div>${t.evidence ? `<p class="prose muted" data-layout="layout-4">${e(t.evidence)}</p>` : ""}</div>${studio ? button("Update", `edit-task:${t.id}`) : ""}</article>`).join("") : empty("A clear plan starts with one step.", "Tasks and evidence remain available throughout this project.")}`;
 }
 function briefPanel(client = false) {
-  const b = room!.brief, owner = !client && room!.role === "owner";
+  const b = room!.brief,
+    owner = !client && room!.role === "owner";
   const heading = client ? "Your shared Living Brief" : "Living Brief";
   if (!b)
     return `<section class="card living-brief" aria-label="Living Brief"><div class="row between"><p class="eyebrow">${e(heading)}</p>${owner ? button("Create Living Brief", "new-brief", "") : ""}</div><h2>A project begins with a clear outcome.</h2><p class="muted">${client ? "The team has not yet shared a Living Brief. You can still review any separate project versions and ask for help." : "Capture the problem, people, success test, boundaries and assumptions in plain language."}</p></section>`;
@@ -356,9 +357,11 @@ function briefPanel(client = false) {
   return `<section class="card living-brief" aria-label="Living Brief"><div class="row between"><p class="eyebrow">${e(heading)}</p><span class="version">Revision ${e(b.revision)}</span></div><h2 class="brief-statement">${e(b.outcome)}</h2><div class="brief-grid">${items.map(([title, value]) => `<div class="brief-detail"><h3>${e(title)}</h3><p>${e(value)}</p></div>`).join("")}</div><div class="row between brief-footer"><small>Recorded ${date(b.created_at)}. Only shared revisions appear in Client Space.</small>${owner ? button("Update Living Brief", "new-brief", "") : ""}</div></section>`;
 }
 function proofSummary(client = false) {
-  const evidence = !client && room!.releases.some((r: Data) =>
-    (r.source_evidence ?? []).some((x: Data) => x.ci_state === "success")
-  );
+  const evidence =
+    !client &&
+    room!.releases.some((r: Data) =>
+      (r.source_evidence ?? []).some((x: Data) => x.ci_state === "success"),
+    );
   return `<section class="proof-summary" aria-label="Delivery evidence"><p class="eyebrow">What is verified?</p><div class="proof-steps"><div><strong>Project need</strong><span>${room!.brief ? "Recorded brief" : "No shared brief yet"}</span></div><div><strong>Demo/version</strong><span>${room!.releases.length ? "A version is recorded; preview not verified" : "No version recorded"}</span></div><div><strong>Engineering evidence</strong><span>${evidence ? "GitHub CI observed; inspect in Studio" : client ? "Not independently verified in this view" : "No passing CI observation recorded"}</span></div><div><strong>Live deployment</strong><span>Not verified</span></div></div></section>`;
 }
 function nextClientDecision() {
@@ -618,10 +621,29 @@ function livingBriefForm() {
     textarea("What problem are we solving?", "problem", b?.problem ?? "") +
       textarea("Who needs it to work?", "audience", b?.audience ?? "") +
       textarea("What outcome should it achieve?", "outcome", b?.outcome ?? "") +
-      textarea("How will we know it works?", "success_criteria", b?.success_criteria ?? "") +
-      textarea("What's outside this scope?", "exclusions", b?.exclusions ?? "", false) +
-      textarea("What assumptions need validation?", "assumptions", b?.assumptions ?? "", false) +
-      select("Share this revision with clients", "visibility", ["internal", "client"], b?.visibility ?? "internal") +
+      textarea(
+        "How will we know it works?",
+        "success_criteria",
+        b?.success_criteria ?? "",
+      ) +
+      textarea(
+        "What's outside this scope?",
+        "exclusions",
+        b?.exclusions ?? "",
+        false,
+      ) +
+      textarea(
+        "What assumptions need validation?",
+        "assumptions",
+        b?.assumptions ?? "",
+        false,
+      ) +
+      select(
+        "Share this revision with clients",
+        "visibility",
+        ["internal", "client"],
+        b?.visibility ?? "internal",
+      ) +
       `<input type="hidden" name="base_revision" value="${e(b?.revision ?? 0)}"><p class="notice">Saving creates an immutable revision. Sharing a newer revision makes outstanding decisions tied to an older shared revision outdated; clients must be asked to review the new version.</p>`,
     "Save new brief revision",
   );
@@ -640,7 +662,9 @@ function clientDecisionForm() {
     `<label class="field">Client<select name="client_id" required>${active.map((m: Data) => `<option value="${e(m.user_id)}">${e(m.name)}</option>`).join("")}</select></label>` +
       field("Decision title", "title") +
       textarea("What exactly needs their decision?", "body") +
-      (shared ? `<input type="hidden" name="brief_revision_id" value="${e(shared.id)}"><p class="muted">Reviewing shared Living Brief revision ${e(shared.revision)}.</p>` : `<p class="muted">No shared Living Brief yet; this request is not tied to a brief revision.</p>`) +
+      (shared
+        ? `<input type="hidden" name="brief_revision_id" value="${e(shared.id)}"><p class="muted">Reviewing shared Living Brief revision ${e(shared.revision)}.</p>`
+        : `<p class="muted">No shared Living Brief yet; this request is not tied to a brief revision.</p>`) +
       `<label class="field">Related recorded version<select name="release_id"><option value="">No version linked</option>${versions.map((r: Data) => `<option value="${e(r.id)}">${e(r.label)}</option>`).join("")}</select></label>` +
       `<p class="notice">This exact request and its version are recorded for one client. Recorded preview links and CI observations are not proof of production deployment. No legal signature or engineering release approval is created.</p>`,
     "Request decision",
