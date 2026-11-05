@@ -759,7 +759,8 @@ try {
     JSON.stringify(
       {
         observed_at: new Date().toISOString(),
-        environment: "local Node/SQLite + Chromium; synthetic identities only",
+        environment: `local Node/SQLite + ${engine}; synthetic identities only`,
+        engine,
         github_live_browser: process.env.MIZVO_VERIFY_GITHUB === "1",
         checks,
         page_errors: errors,
@@ -800,12 +801,44 @@ try {
     }),
   );
 } catch (error) {
-  await mkdir("test-results", { recursive: true });
-  await page.screenshot({
-    path: `test-results/failure-${engine}.png`,
-    fullPage: true,
-  });
-  await writeFile(`test-results/failure-${engine}.html`, await page.content());
+  // Diagnostic capture must never replace the original failing assertion or crash.
+  console.error(error);
+  await writeFile(
+    `docs/evidence/browser-failure-${engine}.json`,
+    JSON.stringify(
+      {
+        engine,
+        error:
+          error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : String(error),
+        browser_connected: browser.isConnected(),
+        owner_page_closed: page.isClosed(),
+        completed_checks: checks,
+        page_errors: errors,
+        csp_errors: csp,
+      },
+      null,
+      2,
+    ),
+  );
+  try {
+    await mkdir("test-results", { recursive: true });
+    if (!page.isClosed()) {
+      await page.screenshot({
+        path: `test-results/failure-${engine}.png`,
+        fullPage: true,
+      });
+      await writeFile(
+        `test-results/failure-${engine}.html`,
+        await page.content(),
+      );
+    }
+  } catch {
+    console.error(
+      "Failure screenshot unavailable; original error retained above.",
+    );
+  }
   throw error;
 } finally {
   await browser.close();
