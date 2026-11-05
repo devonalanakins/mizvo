@@ -415,6 +415,133 @@ try {
   await page.locator("#connection").waitFor({ state: "visible" });
   await ownerContext.setOffline(false);
   await page.locator("#connection").waitFor({ state: "hidden" });
+  // Seed synthetic long histories to exercise real paging without replacing the UI transport.
+  const old = app.domain.createRecord(founder.id, project, {
+    kind: "note",
+    title: "Oldest paginated note",
+    body: "Older context remains retrievable.",
+  });
+  app.s.run(
+    "UPDATE records SET created_at='2020-01-01T00:00:00.000Z' WHERE id=?",
+    old.id,
+  );
+  for (let i = 0; i < 55; i++)
+    app.domain.createRecord(founder.id, project, {
+      kind: "note",
+      title: `History note ${i}`,
+      body: "Synthetic history for page boundaries.",
+    });
+  await page.goto(config.origin + `/studio/projects/${project}?tab=notes`);
+  await page
+    .getByRole("button", { name: "Load older records", exact: true })
+    .waitFor();
+  assert.equal(await page.locator(".record").count(), 50);
+  assert.equal(
+    await page
+      .getByRole("heading", { name: "Oldest paginated note", exact: true })
+      .count(),
+    0,
+  );
+  await capture(page, "room-history", 390);
+  await page.locator("#record-title").fill("Unsaved paging draft");
+  await page
+    .locator("#record-body")
+    .fill("Loading older records must keep this text.");
+  await page
+    .getByRole("button", { name: "Load older records", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Oldest paginated note", exact: true })
+    .waitFor();
+  assert.equal(
+    await page.locator("#record-title").inputValue(),
+    "Unsaved paging draft",
+  );
+  assert.equal(
+    await page.locator("#record-body").inputValue(),
+    "Loading older records must keep this text.",
+  );
+  await page
+    .getByRole("button", { name: "Save to project", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Unsaved paging draft", exact: true })
+    .waitFor();
+  await page.goto(
+    config.origin + `/studio/projects/${project}?tab=notes#record-${old.id}`,
+  );
+  await page
+    .getByRole("heading", { name: "Oldest paginated note", exact: true })
+    .waitFor();
+  await page
+    .locator("#record-" + old.id)
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
+  await page
+    .locator("dialog")
+    .getByLabel("Title", { exact: true })
+    .fill("Older note edited through deep link");
+  await page
+    .getByRole("button", { name: "Save new version", exact: true })
+    .click();
+  await page
+    .getByRole("heading", {
+      name: "Older note edited through deep link",
+      exact: true,
+    })
+    .waitFor();
+  await page.reload();
+  await page
+    .getByRole("heading", {
+      name: "Older note edited through deep link",
+      exact: true,
+    })
+    .waitFor();
+  const clientId = app.s.get(
+    "SELECT id FROM users WHERE email='client@example.test'",
+  ).id;
+  const feedback = app.domain.createRecord(clientId, project, {
+    kind: "feedback",
+    title: "Oldest client feedback",
+    body: "Private client scope.",
+  });
+  app.s.run(
+    "UPDATE records SET created_at='2020-01-01T00:00:00.000Z' WHERE id=?",
+    feedback.id,
+  );
+  for (let i = 0; i < 55; i++)
+    app.domain.createRecord(clientId, project, {
+      kind: "feedback",
+      title: `Feedback history ${i}`,
+      body: "Synthetic client history.",
+    });
+  await client.goto(config.origin + `/space/projects/${project}`);
+  await client
+    .getByRole("heading", { name: "A shared project update", exact: true })
+    .waitFor();
+  assert.equal(
+    await client.getByText("History note 0", { exact: true }).count(),
+    0,
+  );
+  await client.goto(config.origin + `/space/projects/${project}?tab=feedback`);
+  await client
+    .getByRole("button", { name: "Load older records", exact: true })
+    .waitFor();
+  assert.equal(await client.locator(".record").count(), 50);
+  await client.locator("#record-title").fill("Client paging draft");
+  await client
+    .locator("#record-body")
+    .fill("Keep this feedback while reading history.");
+  await client
+    .getByRole("button", { name: "Load older records", exact: true })
+    .click();
+  await client
+    .getByRole("heading", { name: "Oldest client feedback", exact: true })
+    .waitFor();
+  assert.equal(
+    await client.locator("#record-title").inputValue(),
+    "Client paging draft",
+  );
   assert.deepEqual(errors, []);
   assert.deepEqual(csp, []);
   await writeFile(
@@ -443,6 +570,8 @@ try {
           "command keyboard focus",
           "offline feedback",
           "reduced motion",
+          "Room and client pagination with unsaved drafts",
+          "older-record deep links, editing and reload",
         ],
       },
       null,

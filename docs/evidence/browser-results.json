@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-05T03:01:57.753Z",
+  "observed_at": "2026-11-05T03:18:46.863Z",
   "environment": "local Node/SQLite + Chromium; synthetic identities only",
   "github_live_browser": true,
   "checks": [
@@ -146,6 +146,12 @@
       "width": 390,
       "overflow": false,
       "axe_violations": []
+    },
+    {
+      "surface": "room-history",
+      "width": 390,
+      "overflow": false,
+      "axe_violations": []
     }
   ],
   "page_errors": [],
@@ -165,6 +171,8 @@
     "revocation with active session",
     "command keyboard focus",
     "offline feedback",
-    "reduced motion"
+    "reduced motion",
+    "Room and client pagination with unsaved drafts",
+    "older-record deep links, editing and reload"
   ]
 }

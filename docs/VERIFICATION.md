@@ -53,3 +53,7 @@ The founder approved publishing the reviewed implementation and locked AGPL as t
 ## Release-source verification increment
 
 The new release flow has provider-contract and HTTP authorization/race/isolation tests, an actual V0.5-to-migration-002 preservation test, and two additional release-screen captures (1440/390). Live public GitHub verification is exercised through the browser when MIZVO_VERIFY_GITHUB=1; ordinary CI keeps external GitHub calls out of deterministic browser tests. Complete latest command results and source hashes are in verification.json. Previous counts in the original V0.5 receipt remain historical.
+
+## Bounded history increment
+
+Record pages now have tied-timestamp/new-insert traversal tests, cursor/filter/limit/identity negatives, direct older-record retrieval, pending-decision discovery beyond the latest page, and browser coverage for Studio/client paging without losing drafts. Older-note deep linking, edit and reload are verified. The additional mobile history capture brings the current responsive capture set to 25; original counts above remain historical. Latest exact commands/source hashes remain in verification.json.

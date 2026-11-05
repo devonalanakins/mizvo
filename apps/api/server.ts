@@ -491,12 +491,38 @@ export function application(
         "Project not found.",
       );
       if (tail === "" && method === "GET") {
-        send(res, 200, d.room(user, project, client));
+        const params = new URL(req.url!, config.origin).searchParams;
+        send(
+          res,
+          200,
+          d.room(user, project, client, {
+            before: params.get("before") ?? undefined,
+            kind: params.get("kind") ?? undefined,
+            limit: params.has("limit")
+              ? Number(params.get("limit"))
+              : undefined,
+          }),
+        );
         return;
       }
       if (tail === "" && method === "PATCH" && !client) {
         d.projectUpdate(user, project, await body(req));
         send(res, 200, { ok: true });
+        return;
+      }
+      if (tail === "/records" && method === "GET") {
+        const params = new URL(req.url!, config.origin).searchParams;
+        send(
+          res,
+          200,
+          d.recordPage(user, project, client, {
+            before: params.get("before") ?? undefined,
+            kind: params.get("kind") ?? undefined,
+            limit: params.has("limit")
+              ? Number(params.get("limit"))
+              : undefined,
+          }),
+        );
         return;
       }
       if (tail === "/records" && method === "POST") {
@@ -508,6 +534,21 @@ export function application(
       );
       if (record) {
         const recordId = record[1]!;
+        if (method === "GET" && !record[2]) {
+          const r = s.get(
+            "SELECT r.*,u.name AS actor FROM records r JOIN users u ON u.id=r.actor_id WHERE r.id=? AND r.project_id=?",
+            recordId,
+            project,
+          );
+          assert(
+            r && (!client || r.visibility === "client"),
+            404,
+            "Record not found.",
+          );
+          send(res, 200, r);
+          return;
+        }
+
         if (method === "GET" && record[2] === "/history") {
           const r = s.get(
             "SELECT visibility FROM records WHERE id=? AND project_id=?",

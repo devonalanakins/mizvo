@@ -315,11 +315,9 @@ function projectHeader() {
 }
 function inspectorPanel() {
   const p = room!.project;
-  const pending = room!.records.filter(
-      (r: Data) => r.kind === "decision" && r.state === "proposed",
-    ),
+  const pending = room!.pending_decisions ?? 0,
     blockers = room!.tasks.filter((t: Data) => t.status === "blocked");
-  return `<aside id="context" class="inspector ${inspector ? "open" : ""}" ${inspectorCollapsed ? "hidden" : ""} aria-label="Project context"><div class="row between"><h2>Project context</h2><button class="quiet" data-action="close-inspector" aria-label="Close project context">${icon("close")}</button></div><section class="card"><h2>Project overview</h2><dl class="detail-list"><dt>Status</dt><dd>${e(p.status)}</dd><dt>Your role</dt><dd>${e(room!.role)}</dd><dt>Updated</dt><dd>${date(p.updated_at)}</dd><dt>Owner</dt><dd>${e(room!.members.find((m: Data) => m.role === "owner")?.name ?? "Project owner")}</dd></dl>${room!.role === "owner" ? `<div class="divider"></div>${form("status", select("Project stage", "status", ["discovery", "scoping", "design", "engineering", "review", "delivered", "support"], p.status), "Update stage")}` : ""}</section><section class="card"><div class="focus-art"></div><h2>Current focus</h2><p class="scope">${e(p.scope || "Add shared context through a project note. Keep the next useful outcome clear.")}</p></section><section class="card"><h2>Next up</h2>${pending.length ? `<p>${pending.length} decision proposal${pending.length > 1 ? "s" : ""} awaiting explicit review.</p>` : blockers.length ? `<p>${blockers.length} task${blockers.length > 1 ? "s are" : " is"} blocked.</p>` : '<p class="muted">Capture the next useful step as a task or project note.</p>'}<a class="button secondary" href="${projectPath(p.id, "plan")}">Open plan ${icon("arrow")}</a></section><section class="card"><h2>Project history</h2>${room!.activity
+  return `<aside id="context" class="inspector ${inspector ? "open" : ""}" ${inspectorCollapsed ? "hidden" : ""} aria-label="Project context"><div class="row between"><h2>Project context</h2><button class="quiet" data-action="close-inspector" aria-label="Close project context">${icon("close")}</button></div><section class="card"><h2>Project overview</h2><dl class="detail-list"><dt>Status</dt><dd>${e(p.status)}</dd><dt>Your role</dt><dd>${e(room!.role)}</dd><dt>Updated</dt><dd>${date(p.updated_at)}</dd><dt>Owner</dt><dd>${e(room!.members.find((m: Data) => m.role === "owner")?.name ?? "Project owner")}</dd></dl>${room!.role === "owner" ? `<div class="divider"></div>${form("status", select("Project stage", "status", ["discovery", "scoping", "design", "engineering", "review", "delivered", "support"], p.status), "Update stage")}` : ""}</section><section class="card"><div class="focus-art"></div><h2>Current focus</h2><p class="scope">${e(p.scope || "Add shared context through a project note. Keep the next useful outcome clear.")}</p></section><section class="card"><h2>Next up</h2>${pending ? `<p>${pending} decision proposal${pending > 1 ? "s" : ""} awaiting explicit review.</p>` : blockers.length ? `<p>${blockers.length} task${blockers.length > 1 ? "s are" : " is"} blocked.</p>` : '<p class="muted">Capture the next useful step as a task or project note.</p>'}${room!.next_decision ? `<a class="button secondary" href="${projectPath(p.id)}#record-${e(room!.next_decision.id)}">Review decision ${icon("arrow")}</a>` : `<a class="button secondary" href="${projectPath(p.id, "plan")}">Open plan ${icon("arrow")}</a>`}</section><section class="card"><h2>Project history</h2>${room!.activity
     .slice(0, 5)
     .map(
       (a: Data) =>
@@ -337,6 +335,24 @@ function releases() {
 function workbench() {
   return `<div class="row between"><div><h2>Engineering workbench</h2><p class="muted">Read-only source and evidence from GitHub.</p></div>${room!.role === "owner" ? button("Connect repository", "connect-repo") : ""}</div>${room!.repository ? `<section class="card"><p class="version">${e(room!.repository.full_name)}</p><div class="row">${button("Load branches, commits & pull requests", "load-github", "")}${button("Browse source", "browse-source")}${button("Inspect a diff", "diff")}</div><div id="github-evidence" class="stack" data-layout="layout-6"><p class="muted">Evidence is loaded on request. No test outcome is assumed.</p></div></section>` : empty("Connect an authorized repository.", "The installation administrator must allow the repository before the project owner connects it. Source access is limited to internal project members.")}`;
 }
+function recordFilter() {
+  return route.surface === "space"
+    ? route.tab === "room"
+      ? "shared"
+      : route.tab === "support"
+        ? "support"
+        : route.tab === "feedback"
+          ? "feedback"
+          : ""
+    : route.tab === "notes"
+      ? "note"
+      : route.tab === "design"
+        ? "design"
+        : "";
+}
+function recordFeed(list: Data[], client = false, emptyHtml = "") {
+  return `<div id="record-feed">${room!.record_page?.has_more ? button("Load older records", "older-records") : ""}<div id="record-timeline">${list.length ? list.map((r) => recordCard(r, client)).join("") : emptyHtml}</div></div>`;
+}
 function projectView() {
   const client = route.surface === "space",
     tab = route.tab;
@@ -346,25 +362,17 @@ function projectView() {
   else if (["code", "tests"].includes(tab) && !client) main = workbench();
   else if (client) {
     if (tab === "room")
-      main = `<section class="card"><p class="eyebrow">Your project with Mizvo</p><h2 class="space-intro">A clear view of what comes next.</h2><p class="muted">${e(room!.project.scope || room!.project.purpose)}</p><div class="status-track">${["discovery", "design", "engineering", "review", "delivered"].map((x) => `<span class="${room!.project.status === x ? "current" : ""}">${e(x === "engineering" ? "Build" : x[0]!.toUpperCase() + x.slice(1))}</span>`).join("")}</div><a class="button secondary" href="${projectPath(route.project, "releases")}">Review shared versions ${icon("arrow")}</a></section><div data-layout="layout-7"></div>${room!.records
-        .filter((r: Data) => !["feedback", "support"].includes(r.kind))
-        .map((r: Data) => recordCard(r, true))
-        .join("")}`;
+      main = `<section class="card"><p class="eyebrow">Your project with Mizvo</p><h2 class="space-intro">A clear view of what comes next.</h2><p class="muted">${e(room!.project.scope || room!.project.purpose)}</p><div class="status-track">${["discovery", "design", "engineering", "review", "delivered"].map((x) => `<span class="${room!.project.status === x ? "current" : ""}">${e(x === "engineering" ? "Build" : x[0]!.toUpperCase() + x.slice(1))}</span>`).join("")}</div><a class="button secondary" href="${projectPath(route.project, "releases")}">Review shared versions ${icon("arrow")}</a></section><div data-layout="layout-7"></div>${recordFeed(room!.records, true)}`;
     else {
       const kind = tab === "support" ? "support" : "feedback";
-      main =
-        composer(true, kind) +
-        room!.records
-          .filter((r: Data) => r.kind === kind)
-          .map((r: Data) => recordCard(r, true))
-          .join("");
+      main = composer(true, kind) + recordFeed(room!.records, true);
     }
   } else {
     const filter = tab === "notes" ? "note" : tab === "design" ? "design" : "";
     const records = room!.records.filter(
       (r: Data) => !filter || r.kind === filter,
     );
-    main = `<div class="room-toolbar"><h2>${filter ? (filter === "note" ? "Project notes" : "Design context") : "Project conversation"}</h2><button class="quiet" data-action="inspector" aria-controls="context" aria-expanded="${innerWidth > 1200 ? !inspectorCollapsed : inspector}">Project context ${icon("menu")}</button></div>${records.length ? records.map((r: Data) => recordCard(r)).join("") : empty(filter ? "Capture lasting project context." : "Welcome to your project Room.", "Write a note, share an update, or propose a decision. Saved records stay with this project.")}<div data-layout="layout-8"></div>${composer(false, filter || "discussion")}`;
+    main = `<div class="room-toolbar"><h2>${filter ? (filter === "note" ? "Project notes" : "Design context") : "Project conversation"}</h2><button class="quiet" data-action="inspector" aria-controls="context" aria-expanded="${innerWidth > 1200 ? !inspectorCollapsed : inspector}">Project context ${icon("menu")}</button></div>${recordFeed(records, false, empty(filter ? "Capture lasting project context." : "Welcome to your project Room.", "Write a note, share an update, or propose a decision. Saved records stay with this project."))}<div data-layout="layout-8"></div>${composer(false, filter || "discussion")}`;
   }
   return (
     projectHeader() +
@@ -494,9 +502,24 @@ async function render() {
     );
     if (route.project) {
       room = await api(
-        `${route.surface === "space" ? "/space" : ""}/projects/${route.project}`,
+        `${route.surface === "space" ? "/space" : ""}/projects/${route.project}?kind=${recordFilter()}`,
       );
+      const target = location.hash.match(/^#record-([a-f0-9-]{36})$/)?.[1];
+      if (target && !room!.records.some((r: Data) => r.id === target)) {
+        const record = await api(
+          `${route.surface === "space" ? "/space" : ""}/projects/${route.project}/records/${target}`,
+        );
+        room!.records = [record, ...room!.records].sort(
+          (a: Data, b: Data) =>
+            a.created_at.localeCompare(b.created_at) ||
+            a.id.localeCompare(b.id),
+        );
+      }
       root.innerHTML = shell(projectView());
+      if (target)
+        document
+          .getElementById("record-" + target)
+          ?.scrollIntoView({ block: "center" });
     } else root.innerHTML = shell(await overview());
   } catch (err) {
     root.innerHTML = shell(
@@ -515,7 +538,7 @@ async function navigate(path: string) {
   dirty = false;
   history.pushState({}, "", path);
   await render();
-  window.scrollTo(0, 0);
+  if (!location.hash) window.scrollTo(0, 0);
 }
 async function people(project: string) {
   const data = await api("/projects/" + project);
@@ -619,6 +642,52 @@ async function action(value: string) {
       toggle?.focus();
       break;
     }
+    case "older-records": {
+      if (!room?.record_page?.next_cursor) return;
+      const state = room;
+      const context = location.pathname + location.search,
+        project = route.project,
+        client = route.surface === "space";
+      const control = document.querySelector<HTMLButtonElement>(
+        '[data-action="older-records"]',
+      );
+      if (control) control.disabled = true;
+      try {
+        const page = await api(
+          `${client ? "/space" : ""}/projects/${project}/records?kind=${recordFilter()}&before=${encodeURIComponent(room.record_page.next_cursor)}`,
+        );
+        if (
+          room !== state ||
+          context !== location.pathname + location.search ||
+          room?.project.id !== project
+        )
+          return;
+        room.records = [
+          ...new Map(
+            [...page.records, ...room.records].map((r: Data) => [r.id, r]),
+          ).values(),
+        ].sort(
+          (a: Data, b: Data) =>
+            a.created_at.localeCompare(b.created_at) ||
+            a.id.localeCompare(b.id),
+        );
+        room.record_page = page.record_page;
+        const feed = document.querySelector("#record-feed");
+        if (feed) feed.outerHTML = recordFeed(room.records, client);
+        const focus =
+          document.querySelector<HTMLElement>(
+            '[data-action="older-records"]',
+          ) ?? document.querySelector<HTMLElement>("#record-timeline h3");
+        if (focus) {
+          if (focus.tagName === "H3") focus.tabIndex = -1;
+          focus.focus({ preventScroll: true });
+        }
+        toast("Older project records loaded.");
+      } finally {
+        if (control?.isConnected) control.disabled = false;
+      }
+      break;
+    }
     case "new-project":
       modal(
         "Give your project a home.",
@@ -667,6 +736,11 @@ async function action(value: string) {
         "POST",
         { state: b, version: r.version },
       );
+      history.replaceState(
+        {},
+        "",
+        location.pathname + location.search + "#record-" + a,
+      );
       await render();
       toast("Support status recorded.");
       break;
@@ -682,6 +756,11 @@ async function action(value: string) {
           state: b,
           version: r.version,
         });
+        history.replaceState(
+          {},
+          "",
+          location.pathname + location.search + "#record-" + a,
+        );
         await render();
         toast("Decision outcome recorded.");
       }
@@ -999,6 +1078,11 @@ async function submit(f: HTMLFormElement) {
         `${route.surface === "space" ? "/space" : ""}/projects/${route.project}/records/${a}`,
         "PATCH",
         data,
+      );
+      history.replaceState(
+        {},
+        "",
+        location.pathname + location.search + "#record-" + a,
       );
       break;
     case "status":

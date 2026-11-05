@@ -1,10 +1,10 @@
 {
   "repository": "devonalanakins/mizvo",
-  "fetched_at": "2026-11-05T03:02:02.520Z",
+  "fetched_at": "2026-11-05T03:18:51.721Z",
   "branches": [
     {
       "name": "build/secure-platform-v0-5",
-      "sha": "39491ff230d4081c1c4360a1fe8009b2165c1a68",
+      "sha": "64da1f1c4681243df2e747961e2510df16a0c1a9",
       "protected": false
     },
     {
@@ -28,9 +28,9 @@
   "pulls": [
     {
       "number": 2,
-      "title": "feat: secure persistent Mizvo platform foundation (AGPL-3.0)",
+      "title": "feat: secure Mizvo platform and verified release-source evidence (AGPL-3.0)",
       "url": "https://github.com/devonalanakins/mizvo/pull/2",
-      "head": "39491ff230d4081c1c4360a1fe8009b2165c1a68",
+      "head": "64da1f1c4681243df2e747961e2510df16a0c1a9",
       "draft": true
     },
     {

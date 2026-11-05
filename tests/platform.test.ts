@@ -1619,12 +1619,287 @@ test("release-source migration upgrades an existing V0.5 database without changi
         s.get("SELECT COUNT(*) AS count FROM release_source_evidence")?.count,
         0,
       );
-      assert.equal(s.all("SELECT * FROM migrations").length, 2);
+      assert(s.get("SELECT 1 FROM migrations WHERE version=2"));
+      assert(s.get("SELECT 1 FROM migrations WHERE version=3"));
     } finally {
       s.close();
     }
     assert.throws(() => new Store(database, migrations), /does not support/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+test("record pages are bounded and stable through timestamp ties, new inserts and reload", async () => {
+  const f = await fixture();
+  try {
+    const a = await f.login(f.users.owner.email),
+      p = (
+        await f.request(
+          "/projects",
+          "POST",
+          { name: "History", purpose: "Retrieve long histories without loss." },
+          a,
+        )
+      ).value.id;
+    for (let i = 0; i < 67; i++)
+      f.app.domain.createRecord(f.users.owner.id, p, {
+        kind: "note",
+        title: `Note ${i}`,
+        body: "Durable content.",
+      });
+    f.app.s.run(
+      "UPDATE records SET created_at='2026-01-01T00:00:00.000Z' WHERE project_id=?",
+      p,
+    );
+    const expected = f.app.s
+      .all(
+        "SELECT id FROM records WHERE project_id=? ORDER BY created_at,id",
+        p,
+      )
+      .map((r) => r.id);
+    const pending = f.app.domain.createRecord(f.users.owner.id, p, {
+      kind: "decision",
+      title: "Older pending proposal",
+      body: "Must remain discoverable beyond the latest page.",
+    });
+    f.app.s.run(
+      "UPDATE records SET created_at='2019-01-01T00:00:00.000Z' WHERE id=?",
+      pending.id,
+    );
+    const initial = (await f.request(`/projects/${p}`, "GET", undefined, a))
+      .value;
+    assert.equal(initial.records.length, 50);
+    assert.equal(initial.record_page.has_more, true);
+    assert.equal(initial.pending_decisions, 1);
+    assert.equal(initial.next_decision.id, pending.id);
+    assert(!initial.records.some((r: any) => r.id === pending.id));
+    let cursor = "",
+      ids: string[] = [];
+    let first = true;
+    do {
+      const result = await f.request(
+        `/projects/${p}/records?kind=note&limit=7${cursor ? "&before=" + cursor : ""}`,
+        "GET",
+        undefined,
+        a,
+      );
+      assert.equal(result.status, 200);
+      assert(result.value.records.length <= 7);
+      ids = [...result.value.records.map((r: any) => r.id), ...ids];
+      cursor = result.value.record_page.next_cursor ?? "";
+      if (first) {
+        f.app.domain.createRecord(f.users.owner.id, p, {
+          kind: "note",
+          title: "New insertion",
+          body: "Should not shift older page boundaries.",
+        });
+        first = false;
+      }
+    } while (cursor);
+    assert.deepEqual(ids, expected);
+    assert.equal(new Set(ids).size, 67);
+    const oldest = expected[0]!;
+    assert.equal(
+      (await f.request(`/projects/${p}/records/${oldest}`, "GET", undefined, a))
+        .status,
+      200,
+    );
+    const restored = new Store(f.config.database);
+    assert.equal(
+      restored.get(
+        "SELECT COUNT(*) AS count FROM records WHERE project_id=?",
+        p,
+      )?.count,
+      69,
+    );
+    restored.close();
+  } finally {
+    await f.stop();
+  }
+});
+test("paged filters, cursors and direct records enforce project/client isolation and revocation", async () => {
+  const f = await fixture();
+  try {
+    const a = await f.login(f.users.owner.email),
+      c = await f.login(f.users.client.email),
+      other = await f.login(f.users.other.email);
+    const p = (
+        await f.request(
+          "/projects",
+          "POST",
+          { name: "Client history", purpose: "Keep shared histories private." },
+          a,
+        )
+      ).value.id,
+      q = (
+        await f.request(
+          "/projects",
+          "POST",
+          {
+            name: "Other history",
+            purpose: "Reject cursor reuse across projects.",
+          },
+          a,
+        )
+      ).value.id;
+    const inv = (
+      await f.request(
+        `/projects/${p}/invitations`,
+        "POST",
+        { email: f.users.client.email, role: "client" },
+        a,
+      )
+    ).value;
+    await f.request("/invitations/accept", "POST", { token: inv.token }, c);
+    for (let i = 0; i < 12; i++) {
+      f.app.domain.createRecord(f.users.owner.id, p, {
+        kind: "note",
+        title: `PRIVATE ${i}`,
+        body: "Internal only.",
+      });
+      f.app.domain.createRecord(f.users.owner.id, p, {
+        kind: "note",
+        title: `Shared ${i}`,
+        body: "Shared scope.",
+        visibility: "client",
+      });
+      f.app.domain.createRecord(f.users.owner.id, p, {
+        kind: "discussion",
+        title: `Discussion ${i}`,
+        body: "Other type.",
+        visibility: "client",
+      });
+    }
+    const privateId = f.app.s.get(
+      "SELECT id FROM records WHERE project_id=? AND visibility='internal'",
+      p,
+    )!.id;
+    let cursor = "",
+      count = 0;
+    do {
+      const page = (
+        await f.request(
+          `/space/projects/${p}/records?kind=note&limit=5${cursor ? "&before=" + cursor : ""}`,
+          "GET",
+          undefined,
+          c,
+        )
+      ).value;
+      assert(
+        page.records.every(
+          (r: any) => r.kind === "note" && r.visibility === "client",
+        ),
+      );
+      assert(!JSON.stringify(page).includes("PRIVATE"));
+      count += page.records.length;
+      cursor = page.record_page.next_cursor ?? "";
+    } while (cursor);
+    assert.equal(count, 12);
+    const studio = (
+      await f.request(
+        `/projects/${p}/records?kind=note&limit=1`,
+        "GET",
+        undefined,
+        a,
+      )
+    ).value.record_page.next_cursor;
+    assert.equal(
+      (
+        await f.request(
+          `/projects/${q}/records?kind=note&before=${studio}`,
+          "GET",
+          undefined,
+          a,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await f.request(
+          `/projects/${p}/records?kind=discussion&before=${studio}`,
+          "GET",
+          undefined,
+          a,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await f.request(
+          `/space/projects/${p}/records?kind=note&before=${studio}`,
+          "GET",
+          undefined,
+          c,
+        )
+      ).status,
+      400,
+    );
+    for (const query of [
+      "limit=0",
+      "limit=101",
+      "limit=1.5",
+      "limit=oops",
+      "kind=invalid",
+      "before=not-json",
+    ])
+      assert.equal(
+        (
+          await f.request(
+            `/projects/${p}/records?${query}`,
+            "GET",
+            undefined,
+            a,
+          )
+        ).status,
+        400,
+      );
+    assert.equal(
+      (
+        await f.request(
+          `/space/projects/${p}/records/${privateId}`,
+          "GET",
+          undefined,
+          c,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (await f.request(`/space/projects/${p}/records`, "GET", undefined, other))
+        .status,
+      404,
+    );
+    assert.equal(
+      (
+        await f.request(
+          `/space/projects/${p}/records/${privateId}`,
+          "GET",
+          undefined,
+          other,
+        )
+      ).status,
+      404,
+    );
+    await f.request(
+      `/projects/${p}/members/${f.users.client.id}`,
+      "PATCH",
+      { revoke: true },
+      a,
+    );
+    assert.equal(
+      (
+        await f.request(
+          `/space/projects/${p}/records?before=not-json`,
+          "GET",
+          undefined,
+          c,
+        )
+      ).status,
+      404,
+    );
+  } finally {
+    await f.stop();
   }
 });

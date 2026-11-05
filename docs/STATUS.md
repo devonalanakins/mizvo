@@ -6,7 +6,7 @@ All implementation below is locally runnable review source, with public publicat
 | --- | --- | --- |
 | Discover | Home, capabilities, process, work empty state, founder identity, contact path, consented inquiry and private intake | Portfolio empty; approved production contact/privacy/retention still required |
 | Identity | Provisioned accounts, password login/change, expiring sessions, CSRF/Origin checks, logout and other-session revocation | No public registration, MFA/passkeys/OIDC or self-service recovery |
-| Project Room | Persistent projects, purpose/scope/status/owner, notes, discussions, design context, proposed decisions, exact-version approval/rejection, history, inspector, search | No real-time coediting, calls or media; Room list pagination remains |
+| Project Room | Persistent projects, purpose/scope/status/owner, notes, discussions, design context, proposed decisions, exact-version approval/rejection, history, inspector, search | Record history is paginated with older-record retrieval; no real-time coediting, calls or media |
 | Plan | Tasks, milestone labels, priorities, single dependencies with cycle checks, blockers/review states, completion evidence and owner review | No separate milestone entity, multi-dependency graph, assignees, dates, timeline or board |
 | People | Real provisioned identities, hashed one-time invitations, acceptance, 7/30/90-day project access, role changes, expiry and immediate revocation | No actual acquaintances invited; invitation transport is manual and sends no email |
 | Pipeline | Validated inquiry, qualification/scoping/approval stages and atomic conversion to a project | No contractual proposals, signatures, payments or finance adapters |

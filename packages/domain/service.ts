@@ -92,7 +92,112 @@ export class Domain {
     });
     return this.s.get("SELECT * FROM projects WHERE id=?", p.id)!;
   }
-  room(user: string, project: string, client = false) {
+  recordPage(
+    user: string,
+    project: string,
+    client = false,
+    options: { before?: string; kind?: string; limit?: number } = {},
+  ) {
+    const m = membership(this.s, project, user, !client);
+    assert(
+      m.organization_id === this.organization &&
+        (!client || m.role === "client"),
+      404,
+      "Project not found.",
+    );
+    const kind = choice(
+        options.kind ?? "",
+        [
+          "",
+          "shared",
+          "note",
+          "design",
+          "discussion",
+          "decision",
+          "feedback",
+          "support",
+        ],
+        "record filter",
+      ),
+      limit = options.limit ?? 50;
+    assert(
+      Number.isInteger(limit) && limit >= 1 && limit <= 100,
+      400,
+      "Page size must be between 1 and 100.",
+    );
+    const values: any[] = [project];
+    let where = client ? " AND r.visibility='client'" : "";
+    if (kind === "shared")
+      where +=
+        " AND r.visibility='client' AND r.kind NOT IN ('feedback','support')";
+    else if (kind) {
+      where += " AND r.kind=?";
+      values.push(kind);
+    }
+    if (options.before) {
+      let cursor;
+      try {
+        assert(
+          options.before.length <= 1000 &&
+            /^[A-Za-z0-9_-]+$/.test(options.before),
+          400,
+          "Invalid record cursor.",
+        );
+        cursor = JSON.parse(
+          Buffer.from(options.before, "base64url").toString("utf8"),
+        );
+      } catch {
+        assert(false, 400, "Invalid record cursor.");
+      }
+      assert(
+        cursor &&
+          cursor.project === project &&
+          cursor.kind === kind &&
+          cursor.client === client &&
+          typeof cursor.at === "string" &&
+          /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(cursor.at) &&
+          typeof cursor.id === "string" &&
+          /^[a-f0-9-]{36}$/.test(cursor.id),
+        400,
+        "Invalid record cursor for this view.",
+      );
+      where += " AND (r.created_at<? OR (r.created_at=? AND r.id<?))";
+      values.push(cursor.at, cursor.at, cursor.id);
+    }
+    const newest = this.s.all(
+      `SELECT r.*,u.name AS actor FROM records r JOIN users u ON u.id=r.actor_id WHERE r.project_id=?${where} ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
+      ...values,
+      limit + 1,
+    );
+    const more = newest.length > limit,
+      records = newest.slice(0, limit).reverse(),
+      oldest = records[0];
+    return {
+      records,
+      record_page: {
+        has_more: more,
+        next_cursor:
+          more && oldest
+            ? Buffer.from(
+                JSON.stringify({
+                  project,
+                  kind,
+                  client,
+                  at: oldest.created_at,
+                  id: oldest.id,
+                }),
+              ).toString("base64url")
+            : null,
+        limit,
+      },
+    };
+  }
+  room(
+    user: string,
+    project: string,
+    client = false,
+    options: { before?: string; kind?: string; limit?: number } = {},
+  ) {
     const m = membership(this.s, project, user, !client);
     assert(
       m.organization_id === this.organization &&
@@ -101,10 +206,11 @@ export class Domain {
       "Project not found.",
     );
     const p = this.s.get("SELECT * FROM projects WHERE id=?", project)!;
-    const visible = client ? " AND r.visibility='client'" : "";
-    const records = this.s.all(
-      `SELECT r.*,u.name AS actor FROM records r JOIN users u ON u.id=r.actor_id WHERE r.project_id=?${visible} ORDER BY r.created_at,r.id`,
+    const { records, record_page } = this.recordPage(
+      user,
       project,
+      client,
+      options,
     );
     const tasks = this.s.all(
       `SELECT * FROM tasks WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at,id`,
@@ -146,6 +252,7 @@ export class Domain {
         },
         role: m.role,
         records,
+        record_page,
         tasks: tasks.map(({ id, title, milestone, status, updated_at }) => ({
           id,
           title,
@@ -177,6 +284,16 @@ export class Domain {
       project: p,
       role: m.role,
       records,
+      record_page,
+      pending_decisions: this.s.get(
+        "SELECT COUNT(*) AS count FROM records WHERE project_id=? AND kind='decision' AND state='proposed'",
+        project,
+      )!.count,
+      next_decision:
+        this.s.get(
+          "SELECT id,title FROM records WHERE project_id=? AND kind='decision' AND state='proposed' ORDER BY created_at,id LIMIT 1",
+          project,
+        ) ?? null,
       tasks,
       releases,
       members: this.s.all(
