@@ -16,6 +16,14 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Temporary formatter diagnostic; removed before acceptance.
+      - name: Capture exact OCI base test formatting
+        run: |
+          npx prettier --write tests/oci-base-pin.test.mjs
+          echo MIZVO_OCI_BASE_FORMAT_BEGIN
+          base64 -w 80 tests/oci-base-pin.test.mjs
+          echo MIZVO_OCI_BASE_FORMAT_END
+          exit 1
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
