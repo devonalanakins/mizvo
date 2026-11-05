@@ -514,6 +514,10 @@ export function application(
         send(res, 201, d.briefRevision(user, project, await body(req)));
         return;
       }
+      if (tail === "/ownership-plan" && method === "POST" && !client) {
+        send(res, 201, d.ownershipRevision(user, project, await body(req)));
+        return;
+      }
       const milestone = tail.match(/^\/milestones(?:\/([^/]+))?$/);
       if (milestone && !client) {
         if (!milestone[1] && method === "POST") {
