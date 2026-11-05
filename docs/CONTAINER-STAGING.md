@@ -4,7 +4,7 @@
 
 ## What is packaged
 
-`Dockerfile` builds the same licensed AGPL-3.0-only Node/SQLite distribution as the repository's normal build. The final runtime image contains `dist/`, its license/notices, and Node 24; it includes **no** installed npm dependencies, repository source secrets, CI evidence, or customer files. A deliberately restricted `.dockerignore` makes the input explicit. Both stages use the maintained Node 24 Debian slim image line. Before a real customer deployment, independently review the resolved immutable image digest and runtime patch level.
+`Dockerfile` builds the same licensed AGPL-3.0-only Node/SQLite distribution as the repository's normal build. The final runtime image contains `dist/`, its license/notices, and Node 24; it includes **no** installed npm dependencies, repository source secrets, CI evidence, or customer files. A deliberately restricted `.dockerignore` makes the input explicit. Both stages use the **same immutable multi-architecture Node 24 Debian slim index digest**, pinned and reviewed in [OCI image provenance](OCI-IMAGE-PROOF.md). A pin prevents silent upstream image drift but must be deliberately refreshed for security updates. Before a real customer deployment, independently review the resolved immutable image digest and runtime patch level.
 
 The runtime executes as the unprivileged `node` user (UID 1000). SQLite lives at `/var/lib/mizvo/mizvo.sqlite`, with that directory prepared as owner-private mode 0700. The image never includes a database or bootstrap credentials.
 
@@ -35,6 +35,10 @@ npm run test:container
 ```
 
 This uses a local Docker daemon and must run only in an isolated engineering/CI environment. It builds the image without using existing application databases, validates the compose manifest, starts a private container on a Docker-assigned **loopback-only** port, probes real HTTP health and checks runtime UID, read-only root, capability reduction, memory limit and writable database directory. It provisions **one synthetic founder** using a fictional email and test-only password, stops/removes the first instance, replaces it with a second instance using the same private Docker volume, and verifies that the SQLite user count persists. The test removes its containers, image, and volume even on failure.
+
+The Docker rehearsal also checks the **built image's actual compiled file set**, not just the source checkout. CI supplies the checked-out full Git commit and tree as explicit build-argument labels, creates a stopped inspection container, copies `/app/dist` into a private temporary directory and uses the reviewed [installation preflight](INSTALLATION-PREFLIGHT.md) with the CI manifest SHA to verify every compiled file. It then injects an unreviewed file into that extracted copy and requires verification to fail. It records a sanitized `docs/evidence/oci-candidate-check.json` receipt containing the local content-addressed Docker image ID, checkout and manifest digests, and explicit missing gates. The temporary inspection container and copied files are deleted. This requires `npm run build` and `npm run artifact:create` when invoked independently of CI.
+
+A **local Docker image ID is not a remotely published registry digest**. Labels can be forged and a manifest checksum computed within a CI job is not a separately authenticated signature. This test cannot establish a deployed process or immutable remote provenance; real hosting still requires independent release approval, image/digest verification and provider-observed identity.
 
 The existing `npm run test:staging` and `npm run test:tls` gates remain responsible for user-path rollback and actual TLS/CSRF/client permission checks. The new container test does not replace them.
 
