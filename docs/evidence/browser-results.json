@@ -1,0 +1,158 @@
+{
+  "observed_at": "2026-11-05T02:39:55.233Z",
+  "environment": "local Node/SQLite + Chromium; synthetic identities only",
+  "github_live_browser": false,
+  "checks": [
+    {
+      "surface": "discover",
+      "width": 320,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "discover",
+      "width": 390,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "discover",
+      "width": 768,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "discover",
+      "width": 1024,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "discover",
+      "width": 1440,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "discover",
+      "width": 1920,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "room",
+      "width": 320,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "room",
+      "width": 390,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "room",
+      "width": 768,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "room",
+      "width": 1024,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "room",
+      "width": 1440,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "room",
+      "width": 1920,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "workbench",
+      "width": 1440,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "workbench",
+      "width": 390,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "people",
+      "width": 1440,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "client-space",
+      "width": 320,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "client-space",
+      "width": 390,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "client-space",
+      "width": 768,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "client-space",
+      "width": 1024,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "client-space",
+      "width": 1440,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "client-space",
+      "width": 1920,
+      "overflow": false,
+      "axe_violations": []
+    },
+    {
+      "surface": "plan",
+      "width": 1440,
+      "overflow": false,
+      "axe_violations": []
+    }
+  ],
+  "page_errors": [],
+  "csp_errors": [],
+  "flows": [
+    "public inquiry",
+    "founder authentication",
+    "project creation",
+    "note editing and reload",
+    "proposed decisions",
+    "task creation",
+    "two browser identities",
+    "invitation acceptance",
+    "client isolation",
+    "feedback",
+    "version-specific client approval",
+    "revocation with active session",
+    "command keyboard focus",
+    "offline feedback",
+    "reduced motion"
+  ]
+}

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+var/
+.env
+*.sqlite*
+coverage/
+test-results/
+docs/evidence/*.png

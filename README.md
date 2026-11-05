@@ -1,32 +1,70 @@
 # Mizvo
 
-**Early-stage founder-led software engineering and workplace design project.**
+An independent, founder-led custom software engineering practice. **Make the improbable useful.**
 
-Mizvo is being designed as an independent engineering practice that turns unusual ideas into useful, verifiable software. The proposed online operating platform will let people work autonomously while sharing a coherent project context.
+This branch contains the **V0.5 implementation review build**, released under **GNU AGPL-3.0-only**; see [LICENSE](LICENSE). The founder approved public source publication and selected AGPL as the standing default on November 4, 2026. This is implemented software with local verification, not a production deployment. The original design PR #1 remains separate and unmerged.
 
-> **Status:** Prelaunch concept. The organization and platform described below are not an incorporated business, operational team, client offering, or deployed multi-user service. Brand clearance, legal form and source-release decisions are still open.
+Three related web surfaces share one maintainable TypeScript application and one server authorization boundary:
 
-## Proposed product experiences
+- **Discover** (`/`): capabilities, process, truthful portfolio empty state, company information, consented inquiry and private intake.
+- **Studio** (`/studio`): persistent projects, Rooms, notes/discussion/design records, proposed decisions and history, tasks/dependencies/evidence, project invitations, People, search, notifications, Pipeline and delivery records.
+- **Client Space** (`/space`): an explicit client-only projection of shared project context, milestones, versioned demonstrations/deliverables, feedback, support requests and attributable version reviews.
 
-- **Discover:** public explanation of capabilities, process and future project inquiry.
-- **Studio:** a secure online engineering workplace organized around persistent project rooms, scoped decisions, reviewed source changes and delivery evidence.
-- **Client Space:** approachable project plans, client feedback, versioned approvals and eventual ownership handoff.
+The Workbench reads allowlisted GitHub repositories. It never executes code or writes to GitHub. A version record is not a deployment, and an approval is not a claim that a build passed tests.
 
-The initial design is **solo-founder-first**, with later invited contributors. No employee, customer, partnership or staffing status is implied by prototypes or diagrams.
+## Run the actual application
 
-## Operating principles
+Requirements: Node **24.22.1** (the verified runtime), npm, and a local writable disk. No paid service, external identity provider, AI provider, or database account is required for local operation.
 
-- **Independence + integration:** work asynchronously and autonomously, with shared project context rather than mandatory presence.
-- **Human value first:** a nontechnical person should understand what a product does and accomplish a meaningful task without coaching.
-- **Evidence over claims:** source, tests, reviews, approvals and delivery receipts should agree.
-- **Open and portable:** prefer fully open-source, self-hostable systems where rights permit, without publishing confidential client software.
-- **Respect boundaries:** clients, people, source rights and production environments remain independently scoped; consent and authorization are explicit.
-- **No surveillance:** no compulsory always-on video, silent recording or activity leaderboard.
+```sh
+npm ci
+npm run build
+read -rsp 'Founder password (14+ characters): ' MIZVO_ACCOUNT_PASSWORD
+export MIZVO_ACCOUNT_PASSWORD
+npm run account -- founder@example.test 'Your Name' founder
+unset MIZVO_ACCOUNT_PASSWORD
+npm run dev
+```
 
-## Design source status
+Open `http://localhost:4173/studio`. Use an address you actually control for a real installation. No default password or preseeded user exists. The bootstrap command is an administrator operation, not public registration. Client accounts use the same command with the `client` argument; contributors use `member`. Actual access still requires a project-specific invitation, acceptance, and an unexpired, unrevoked membership.
 
-A local browser-only prototype is under private review. It is **not** published into this repository: rights/licensing and public-release decisions remain open. The first planned source milestone is a secure, testable single-project foundation, followed by an invited two-person collaboration workflow and a reviewed Git change.
+See [self-hosting](docs/SELF-HOSTING.md), [security boundaries](docs/SECURITY.md), [verification](docs/VERIFICATION.md), [capability status](docs/STATUS.md), and [release/rollback](docs/RELEASE.md).
 
-See [Online Studio design direction](docs/online-studio.md) for the proposal and acceptance gates.
+## Verify
 
-No live service, fundraising, bookings, access invitations or production customer-data processing is enabled by this README.
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npx playwright install --with-deps chromium
+npm run test:browser
+npm audit
+```
+
+Optional live public GitHub verification:
+
+```sh
+npm run verify:github
+MIZVO_VERIFY_GITHUB=1 npm run test:browser
+```
+
+The normal browser suite uses independently authenticated synthetic founder, engineer, and client accounts against a temporary SQLite database. It exercises real HTTP and DOM behavior. The unit/integration suite separately marks mock-provider contract tests. Temporary accounts and databases are removed; no actual acquaintance is invited.
+
+## Source organization
+
+- `apps/api`: HTTP/session boundary and read-only GitHub adapter.
+- `apps/web`: semantic DOM rendering, routing and application interactions across the three surfaces.
+- `packages/authz`: credentials, sessions, input validation and project roles.
+- `packages/domain`: connected project, decision, invitation, task and release services.
+- `packages/storage`: SQLite adapter, atomic migrations and transactions.
+- `packages/ui`: shared tokens, responsive layouts, self-hosted font declarations and original architectural SVG.
+- `tests`: actual HTTP integration, adversarial isolation, migration/recovery and browser workflows.
+
+This is a single-organization installation with explicit organization IDs and project-scoped grants. It is not a deployed multi-organization SaaS. Node’s synchronous SQLite adapter is portable to another Node host, **not a Cloudflare D1/Workers adapter**. Cloudflare hosting needs a deliberately implemented/tested runtime adapter or an approved Node origin behind Cloudflare; neither is claimed here.
+
+## Rights
+
+The V0.4 archive was inspected and preserved separately. Its 55-file source manifest and 16 prototype tests were reproduced, but none of its unlicensed executable source, screenshots, or private operating documents was imported into this branch. The new interface follows the approved visual contract through normal DOM, CSS, and an original SVG illustration; it does not embed a concept board. Downloaded Fontsource fonts carry their original SIL Open Font License notices in the build. See [provenance](docs/PROVENANCE.md).
+
+No clients, staff, contracts, certifications, legal entity status, live presence, test results, or deployments are invented. Sam and other prospective collaborators have not been invited.

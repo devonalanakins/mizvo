@@ -1,0 +1,114 @@
+$ npm ci --ignore-scripts
+
+added 12 packages in 875ms
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
+
+$ npm run lint
+
+> mizvo-platform@0.5.0 lint
+> prettier --check apps packages scripts tests package.json tsconfig.json .github
+
+Checking formatting...
+All matched files use Prettier code style!
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
+
+$ npm run typecheck
+
+> mizvo-platform@0.5.0 typecheck
+> tsc --noEmit
+
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
+
+$ npm test
+
+> mizvo-platform@0.5.0 test
+> node --experimental-strip-types --test tests/*.test.ts
+
+✔ real HTTP Room workflow survives restart; proposals, history, concurrency and authorization (2630.026409ms)
+✔ independent accounts: scoped invitation, expiry, replay, role changes and immediate revocation (2508.451562ms)
+✔ Client Space is a projection: no internal records, history, engineering, tasks or cross-client access (2529.921928ms)
+✔ task dependencies, completion evidence, version checks and immutable release reviews (2299.774457ms)
+✔ public inquiry validates consent, stays private, and connects to project lifecycle (2390.94468ms)
+✔ session controls and organization isolation are enforced by the server (2237.936154ms)
+✔ GitHub adapter contract: allowlist, exact endpoints, authentic upstream status and failures (mock transport) (2.184408ms)
+✔ backup CLI captures live WAL data and restored database preserves attribution and schema (1985.959318ms)
+✔ concurrent writes accept only one reviewed version; malformed versions are rejected (2101.038459ms)
+✔ password changes invalidate other sessions, reject wrong current password, and preserve current access (3851.216739ms)
+✔ grant expiry, cross-project object IDs, private notifications, and preference controls (2150.530444ms)
+✔ versioned migration upgrade preserves data; edited migrations and incompatible downgrades are refused (15.122083ms)
+✔ password verification preserves whitespace and uses explicit recorded work factors (928.850952ms)
+✔ client support requests have attributable team resolution and client reopening with version protection (2147.784818ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27921.025807
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
+
+$ npm run build
+
+> mizvo-platform@0.5.0 build
+> tsc && node scripts/build.mjs
+
+Built portable server + web assets.
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
+
+$ npm run test:distribution
+
+> mizvo-platform@0.5.0 test:distribution
+> node scripts/verify-distribution.mjs
+
+PASS: copied compiled distribution runs with Node alone, migrations, local fonts, login, persistent project and authorized Room.
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
+
+$ npm run test:browser
+
+> mizvo-platform@0.5.0 test:browser
+> node tests/browser.mjs
+
+{"screenshots":22,"axe_violations":0,"page_errors":0,"flows":"passed"}
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
+
+$ npm audit --json
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {},
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "dependencies": {
+      "prod": 1,
+      "dev": 13,
+      "optional": 1,
+      "peer": 1,
+      "peerOptional": 0,
+      "total": 13
+    }
+  }
+}
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+EXIT 0
