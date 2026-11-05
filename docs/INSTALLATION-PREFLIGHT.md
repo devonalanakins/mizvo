@@ -30,6 +30,8 @@ node scripts/installation-preflight.mjs \
 
 **Trust-source warning:** The GitHub artifact ZIP digest is **not** the SHA-256 of `build-proof.json`. Retrieve and independently check the manifest digest, reviewed Git checkout/tree, GitHub workflow and artifact identity from a trusted release record or independently reviewed CI evidence. A PR build may use a synthetic **merge commit**, not the PR branch head. Never claim they are equivalent. This preflight intentionally refuses to substitute the branch head for the actual build checkout.
 
+CI runs `npm run test:installation` after compilation and manifest verification. The existing `npm run test:container` also extracts the complete compiled filesystem from the locally built Docker image and checks it against that same checkout's manifest, then proves that injecting an extra file causes rejection. OCI inspection does not add a signed origin claim or prove the image used by a remote process.
+
 CI runs `npm run test:installation` after compilation and manifest verification. The synthetic command copies the full `dist/` tree and manifest to private temporary storage, passes trusted values from the checked-out GitHub job, verifies the candidate, deliberately adds an unreviewed file, and asserts rejection. It deletes the temporary installation and records only a sanitized `docs/evidence/installation-preflight.json` receipt. Dedicated negative tests also reject altered manifest digests, mismatched source IDs, modified/missing/extra files and symlinks.
 
 ## Release gates this does not satisfy

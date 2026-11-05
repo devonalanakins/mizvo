@@ -11,6 +11,12 @@ COPY scripts/ ./scripts/
 RUN npm run build
 
 FROM node:24-bookworm-slim AS runtime
+# Operator-supplied labels identify build inputs; they are not signatures.
+ARG MIZVO_SOURCE_COMMIT=unverified
+ARG MIZVO_SOURCE_TREE=unverified
+LABEL org.opencontainers.image.source="https://github.com/devonalanakins/mizvo" \
+      org.opencontainers.image.revision="${MIZVO_SOURCE_COMMIT}" \
+      com.mizvo.checkout-tree="${MIZVO_SOURCE_TREE}"
 ENV NODE_ENV=production \
     PORT=4173 \
     MIZVO_BIND_HOST=0.0.0.0 \
