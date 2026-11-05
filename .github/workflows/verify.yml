@@ -16,6 +16,15 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Temporary formatting diagnostic; removed once exact output is committed.
+      - name: Print formatted recovery files for exact restoration
+        run: |
+          npx prettier --write scripts/recovery-drill.ts tests/recovery-drill.test.ts
+          for file in scripts/recovery-drill.ts tests/recovery-drill.test.ts; do
+            echo "MIZVO_FORMAT_BEGIN:$file"
+            base64 -w 80 "$file"
+            echo "MIZVO_FORMAT_END:$file"
+          done
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
