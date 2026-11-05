@@ -70,8 +70,10 @@ export async function startLocalReview(): Promise<LocalReviewSession> {
     const service = instance.domain;
     const project = service.createProject(founder.id, {
       name: "Lighthouse — fictional client project",
-      purpose: "See how Mizvo turns an idea into shared decisions and reviewed delivery.",
-      scope: "A fictional demonstration only. No real provider, client or payment.",
+      purpose:
+        "See how Mizvo turns an idea into shared decisions and reviewed delivery.",
+      scope:
+        "A fictional demonstration only. No real provider, client or payment.",
     });
     for (const [member, role] of [
       [engineer, "contributor"],
@@ -86,12 +88,17 @@ export async function startLocalReview(): Promise<LocalReviewSession> {
     }
     const brief = service.briefRevision(founder.id, project.id, {
       base_revision: 0,
-      problem: "A fictional community group needs a clearer process for sharing progress.",
+      problem:
+        "A fictional community group needs a clearer process for sharing progress.",
       audience: "Fictional staff members and a fictional project sponsor.",
-      outcome: "One accessible workspace with visible decisions and reviewable tasks.",
-      success_criteria: "Each role can see only the project context assigned to it.",
-      exclusions: "No production hosting, data collection or external accounts.",
-      assumptions: "All project details and identities are invented for this local review.",
+      outcome:
+        "One accessible workspace with visible decisions and reviewable tasks.",
+      success_criteria:
+        "Each role can see only the project context assigned to it.",
+      exclusions:
+        "No production hosting, data collection or external accounts.",
+      assumptions:
+        "All project details and identities are invented for this local review.",
       visibility: "client",
     });
     service.createRecord(founder.id, project.id, {
@@ -182,8 +189,14 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  if (process.argv.length !== 2 || !process.stdout.isTTY || !process.stdin.isTTY) {
-    console.error("Run npm run review:local in an interactive local terminal, without arguments.");
+  if (
+    process.argv.length !== 2 ||
+    !process.stdout.isTTY ||
+    !process.stdin.isTTY
+  ) {
+    console.error(
+      "Run npm run review:local in an interactive local terminal, without arguments.",
+    );
     process.exitCode = 1;
   } else {
     const session = await startLocalReview();
@@ -193,15 +206,23 @@ if (
       const login = session.users[role];
       console.log(role + ": " + login.email + " / " + login.password);
     }
-    console.log("All data stays in an isolated temporary folder and is deleted on Ctrl+C.");
-    console.log("No email was sent, no real customer account was created, and no external access is granted.");
+    console.log(
+      "All data stays in an isolated temporary folder and is deleted on Ctrl+C.",
+    );
+    console.log(
+      "No email was sent, no real customer account was created, and no external access is granted.",
+    );
     let stopping = false;
     const stop = () => {
       if (stopping) return;
       stopping = true;
       void session.close().then(
-        () => { process.exitCode = 0; },
-        () => { process.exitCode = 1; },
+        () => {
+          process.exitCode = 0;
+        },
+        () => {
+          process.exitCode = 1;
+        },
       );
     };
     process.once("SIGINT", stop);
