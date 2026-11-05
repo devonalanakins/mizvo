@@ -145,6 +145,18 @@ try {
     .getByRole("heading", { name: "Mizvo verification project" })
     .waitFor();
   const project = page.url().match(/projects\/([^?]+)/)[1];
+  await page.getByRole("button", { name: "Create Living Brief" }).click();
+  await page.getByLabel("What problem needs solving?").fill("The client lacks a simple view of the real work.");
+  await page.getByLabel("Who needs this to work?").fill("A nontechnical client.");
+  await page.getByLabel("What would success look like?").fill("Review one real version without reading engineering tickets.");
+  await page.getByLabel("Next meaningful action (optional)").fill("Preview the client flow.");
+  await page.getByLabel("Brief visibility").selectOption("client");
+  await page.getByRole("button", { name: "Save Living Brief" }).click();
+  await page.getByText("Review one real version without reading engineering tickets.").waitFor();
+  await page.getByRole("link", { name: "Living Brief", exact: true }).click();
+  await capture(page, "living-brief-studio", 390);
+  await page.getByRole("link", { name: "Room", exact: true }).click();
+
   await page.locator("#record-kind").selectOption("note");
   await page.locator("#record-title").fill("Architecture context");
   await page
@@ -320,6 +332,10 @@ try {
     await client.getByText("Architecture context, revised").count(),
     0,
   );
+  await client.getByRole("link", { name: "Purpose", exact: true }).click();
+  await client.getByText("Review one real version without reading engineering tickets.").waitFor();
+  await capture(client, "living-brief-client", 390);
+  await client.getByRole("link", { name: "Overview", exact: true }).click();
   await client
     .getByRole("heading", { name: "A shared project update" })
     .waitFor();
@@ -370,6 +386,8 @@ try {
   await page
     .getByLabel("What exactly needs their decision?")
     .fill("Is this explanation clear and useful?");
+  await page.getByLabel("Reviewed shared brief").selectOption("1");
+  await page.getByLabel("Related client-visible preview").selectOption(rel.body.id);
   await page.getByRole("button", { name: "Request decision" }).click();
   await page
     .getByRole("heading", { name: "Approve the onboarding description" })
@@ -378,6 +396,8 @@ try {
   await client
     .getByRole("heading", { name: "Approve the onboarding description" })
     .waitFor();
+  await client.getByText("Bound to shared Living Brief v1.").waitFor();
+  await client.getByRole("link", { name: "Preview Verification version 1" }).waitFor();
   await capture(client, "client-decisions", 390);
   await client.getByRole("button", { name: "Respond to request" }).click();
   await client.getByLabel("Your decision").selectOption("accepted");
@@ -603,6 +623,8 @@ try {
           "client isolation",
           "feedback",
           "version-specific client approval",
+          "Living Brief editor and client-safe projection",
+          "brief-bound client decision with a linked client-visible preview",
           "revocation with active session",
           "command keyboard focus",
           "offline feedback",
