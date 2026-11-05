@@ -21,6 +21,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run test:distribution
+      - run: npm run artifact:create
+      - run: npm run artifact:verify
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm audit --omit=dev --audit-level=high
@@ -29,4 +31,13 @@ jobs:
         with:
           name: mizvo-verification
           path: docs/evidence/
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: success()
+        with:
+          name: mizvo-candidate-distribution
+          path: |
+            dist/
+            build-proof.json
+          if-no-files-found: error
           retention-days: 14

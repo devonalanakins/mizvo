@@ -12,6 +12,8 @@ Three related web surfaces share one maintainable TypeScript application and one
 
 The Workbench reads allowlisted GitHub repositories. It never executes code or writes to GitHub. A version record is not a deployment, and an approval is not a claim that a build passed tests.
 
+Compiled candidate files can be checked against an [artifact integrity manifest](docs/ARTIFACT-INTEGRITY.md). This is a checksum receipt tied to the CI checkout, **not** a signed supply-chain attestation or a production release.
+
 ## Run the actual application
 
 Requirements: Node **24.22.1** (the verified runtime), npm, and a local writable disk. No paid service, external identity provider, AI provider, or database account is required for local operation.

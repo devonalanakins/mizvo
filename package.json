@@ -11,7 +11,7 @@
     "dev": "node --experimental-strip-types apps/api/server.ts",
     "build": "tsc && node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
     "test:browser": "node tests/browser.mjs",
     "check": "npm run typecheck && npm test && npm run build",
     "account": "node --experimental-strip-types scripts/account.ts",
@@ -20,7 +20,9 @@
     "backup": "node scripts/backup.ts",
     "verify:github": "node scripts/verify-github.ts",
     "test:distribution": "node scripts/verify-distribution.mjs",
-    "verify:all": "node scripts/verify-all.mjs"
+    "verify:all": "node scripts/verify-all.mjs",
+    "artifact:create": "node scripts/artifact-proof.mjs create dist build-proof.json",
+    "artifact:verify": "node scripts/artifact-proof.mjs verify dist build-proof.json"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.11.0",
