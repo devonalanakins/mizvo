@@ -24,6 +24,7 @@ jobs:
       - run: npm run artifact:create
       - run: npm run artifact:verify
       - run: npm run test:staging
+      - run: npm run test:tls
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm audit --omit=dev --audit-level=high
