@@ -16,6 +16,14 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Temporary, one-run formatter receipt. Remove before accepting this PR.
+      - name: Capture exact formatted app bind code
+        run: |
+          npx prettier --write apps/api/server.ts
+          echo MIZVO_OCI_FORMAT_BEGIN
+          base64 -w 80 apps/api/server.ts
+          echo MIZVO_OCI_FORMAT_END
+          exit 1
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
