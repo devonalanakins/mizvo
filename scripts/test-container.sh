@@ -2,8 +2,8 @@
 # Rehearse packaged runtime as an isolated, never-public synthetic container.
 set -euo pipefail
 
-image="mizvo-ci-stage-${GITHUB_RUN_ID:-local}-$"
-inspector="mizvo-ci-inspect-${GITHUB_RUN_ID:-local}-$"
+image="mizvo-ci-stage-${GITHUB_RUN_ID:-local}-${BASHPID}"
+inspector="mizvo-ci-inspect-${GITHUB_RUN_ID:-local}-${BASHPID}"
 receipt_dir=""
 volume="mizvo-ci-data-${GITHUB_RUN_ID:-local}-$$"
 first="mizvo-ci-first-${GITHUB_RUN_ID:-local}-$$"
