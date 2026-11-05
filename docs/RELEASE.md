@@ -28,6 +28,19 @@ node dist/scripts/backup.js /approved-backups/mizvo-before-upgrade.sqlite
 
 The destination must not already exist. The helper uses the online backup API and integrity-checks the snapshot. Copy the verified snapshot to an approved encrypted independent location and record retention. No off-host backup job or external storage has been activated.
 
+## Isolated offline recovery rehearsal
+
+After making a snapshot through the online backup command, perform an operator-only recovery rehearsal in an **approved encrypted private directory**. This does not expose the snapshot or restore any production database.
+
+```sh
+mkdir -m 700 /approved-private-drill
+npm run recovery:drill -- /approved-backups/mizvo-before-upgrade.sqlite /approved-private-drill
+```
+
+The drill refuses a nonregular snapshot, snapshot with sidecars, an accessible-to-others POSIX drill directory or incompatible migration checksums. It SHA-256 checks the source and isolated copy, performs `PRAGMA integrity_check` and `PRAGMA foreign_key_check`, verifies the *current* set of migration checksums, tests recovered-session invalidation **only in the private isolated copy**, rechecks the copy, writes a JSON receipt with counts and hashes but no application record content, and immediately deletes its temporary database. Failed drills do not create a passing receipt.
+
+Use the same reviewed code and migrations that will run the restored database. If the database was created by a later release, use the matching release instead. The receipt is local operator evidence, **not** a remotely trusted signed attestation, not a verification of client cloud ownership or exported client data, and not a disaster recovery SLAs. Backups remain sensitive and must be protected, independently retained, and periodically restored against real operational objectives. Actual production recovery still requires explicit role approvals, post-snapshot permission reconciliation, and live service verification.
+
 ## Rollback / restore
 
 1. Stop the application and verify the process is stopped. Preserve the failed database plus WAL/SHM sidecars as a protected incident set.
