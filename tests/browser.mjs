@@ -409,7 +409,7 @@ try {
   await page
     .getByLabel("What exactly needs their decision?")
     .fill("Is this explanation clear and useful?");
-  await page.getByLabel("Related recorded version").selectOption(rel.value.id);
+  await page.getByLabel("Related recorded version").selectOption(rel.body.id);
   await page.getByRole("button", { name: "Request decision" }).click();
   await page
     .getByRole("heading", { name: "Approve the onboarding description" })

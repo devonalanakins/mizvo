@@ -16,8 +16,6 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npm run format
-      - run: git diff --color=never -- apps/api/server.ts apps/web/main.ts packages/domain/service.ts tests/platform.test.ts tests/browser.mjs packages/ui/theme.css
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
