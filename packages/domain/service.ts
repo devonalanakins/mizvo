@@ -1,5 +1,5 @@
 import type { Store, Row } from "../storage/database.ts";
-import type { PreviewObservation } from "../../apps/api/preview.ts";
+import type { PreviewObservation } from "./preview-evidence.ts";
 import {
   id,
   now,
