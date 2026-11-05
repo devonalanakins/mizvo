@@ -590,11 +590,7 @@ function taskForm(t?: Data) {
   return form(
     t ? `edit-task:${t.id}` : "task",
     field("Task", "title", t?.title ?? "") +
-      field(
-        "Milestone label (unlinked tasks)",
-        "milestone",
-        t?.milestone ?? "Project",
-      ) +
+      field("Milestone", "milestone", t?.milestone ?? "Project") +
       `<label class="field">Linked milestone<select name="milestone_id"><option value="">No linked milestone</option>${(p.milestones ?? []).map((m: Data) => `<option value="${e(m.id)}" ${t?.milestone_id === m.id ? "selected" : ""}>${e(m.title)}</option>`).join("")}</select></label>` +
       select(
         "Status",
