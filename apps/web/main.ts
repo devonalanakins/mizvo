@@ -297,6 +297,7 @@ function projectHeader() {
   const tabs = client
     ? [
         ["room", "Overview"],
+        ["brief", "Purpose"],
         ["plan", "Progress"],
         ["decisions", "Decisions"],
         ["releases", "Reviews & files"],
@@ -305,6 +306,7 @@ function projectHeader() {
       ]
     : [
         ["room", "Room"],
+        ["brief", "Living Brief"],
         ["plan", "Plan"],
         ["decisions", "Client decisions"],
         ["code", "Code"],
@@ -340,6 +342,29 @@ function tasks() {
   });
   return `<div class="row between" data-layout="layout-2"><div><h2>Plan / Milestones</h2><p class="muted">Concrete checkpoints, linked work, and explicit review.</p></div><div class="row">${canEdit ? button(`${icon("plus")} Add milestone`, "new-milestone", "") : ""}${studio ? button(`${icon("plus")} Add task`, "new-task", "") : ""}</div></div>${milestones.length ? `<div class="grid">${cards.join("")}</div>` : empty("No milestone checkpoints yet.", "The project owner can create a dated checkpoint and choose what to share with clients.")}<div class="divider"></div><h2>Tasks</h2>${list.length ? list.map((t: Data) => `<article class="task"><span>${icon(t.status === "done" ? "check" : "plan")}</span><div class="task-copy"><h3>${e(t.title)}</h3><small>${e(t.milestone)} ${t.depends_on ? "· Has a dependency" : ""}</small><div class="row" data-layout="layout-3">${badge(t.status)}${t.priority === "high" ? badge("high") : ""}</div>${t.evidence ? `<p class="prose muted" data-layout="layout-4">${e(t.evidence)}</p>` : ""}</div>${studio ? button("Update", `edit-task:${t.id}`) : ""}</article>`).join("") : empty("A clear plan starts with one step.", "Tasks and evidence remain available throughout this project.")}`;
 }
+
+function livingBrief(client = false) {
+  const b = room!.brief;
+  const canEdit = !client && room!.role === "owner";
+  if (!b)
+    return `<section class="card living-brief" aria-label="Living Brief"><p class="eyebrow">Living Brief</p><h2>Start with the problem, not the software.</h2><p class="muted">The project owner can capture the people, desired outcome, boundaries and next useful action here.</p>${canEdit ? button("Create Living Brief", "revise-brief", "") : ""}</section>`;
+  const visible = client || b.visibility === "client";
+  return `<section class="card living-brief" aria-label="Living Brief"><div class="row between"><div><p class="eyebrow">Living Brief · Version ${e(b.version)}</p><h2>What this project needs to make possible</h2></div>${canEdit ? button("Revise Living Brief", "revise-brief", "") : ""}</div>${!client ? `<p class="muted">${visible ? "This exact revision is shared with clients." : "Internal draft only. Clients see the last shared version."}</p>` : ""}<dl class="detail-list"><dt>The challenge</dt><dd>${e(b.problem)}</dd><dt>Who this is for</dt><dd>${e(b.audience)}</dd><dt>Successful outcome</dt><dd>${e(b.outcome)}</dd>${b.exclusions ? `<dt>Not part of this work</dt><dd>${e(b.exclusions)}</dd>` : ""}${b.next_step ? `<dt>Next useful action</dt><dd>${e(b.next_step)}</dd>` : ""}</dl><small class="muted">Recorded ${date(b.created_at)} · Revisions preserve earlier versions.</small></section>`;
+}
+function briefForm() {
+  const b = room!.brief;
+  return form(
+    "brief",
+    textarea("What problem needs solving?", "problem", b?.problem ?? room!.project.purpose) +
+      textarea("Who needs this to work?", "audience", b?.audience ?? "") +
+      textarea("What would success look like?", "outcome", b?.outcome ?? "") +
+      textarea("Boundaries and exclusions (optional)", "exclusions", b?.exclusions ?? "", false) +
+      textarea("Next meaningful action (optional)", "next_step", b?.next_step ?? "", false) +
+      select("Brief visibility", "visibility", ["internal", "client"], b?.visibility ?? "internal") +
+      `<input type="hidden" name="version" value="${b?.version ?? 0}"><p class="notice">Each save creates an immutable revision. Publishing a new shared revision makes pending client decisions linked to an older shared version stale. It does not approve releases or send messages.</p>`,
+    "Save Living Brief",
+  );
+}
 function clientDecisionView() {
   const client = route.surface === "space",
     list = room!.client_decisions ?? [],
@@ -353,10 +378,11 @@ function clientDecisionView() {
         ),
     canRequest = !client && room!.role === "owner" && eligible.length > 0;
   const cards = list
-    .map(
-      (d: Data) =>
-        `<article class="card"><div class="row between"><h3>${e(d.title)}</h3>${badge(d.status)}</div>${client ? "" : `<p class="muted">For ${e(d.recipient)}</p>`}<p class="prose">${e(d.body)}</p><small>Requested ${date(d.created_at)}</small>${d.outcome ? `<div class="review"><strong>${e(d.outcome.replaceAll("_", " "))}</strong><p class="prose">${e(d.comment)}</p><small>${date(d.answered_at)}</small></div>` : ""}${client && d.status === "pending" ? button("Respond to request", `respond-client-decision:${d.id}`, "") : ""}${!client && room!.role === "owner" && d.status === "pending" ? button("Cancel pending request", `cancel-client-decision:${d.id}`) : ""}</article>`,
-    )
+    .map((d: Data) => {
+      const preview = room!.releases.find((r: Data) => r.id === d.preview_release_id);
+      const stale = client && d.brief_version != null && d.brief_version !== room!.brief?.version;
+      return `<article class="card"><div class="row between"><h3>${e(d.title)}</h3>${badge(d.status)}</div>${client ? "" : `<p class="muted">For ${e(d.recipient)}</p>`}<p class="prose">${e(d.body)}</p>${d.brief_version != null ? `<p class="muted">Bound to shared Living Brief v${e(d.brief_version)}. <a href="${projectPath(route.project, "brief")}">Read the brief</a></p>` : ""}${preview?.demo_url ? `<p><a class="button secondary" target="_blank" rel="noopener noreferrer" href="${e(preview.demo_url)}">Preview ${e(preview.label)} ${icon("arrow")}</a></p>` : ""}<small>Requested ${date(d.created_at)}</small>${d.outcome ? `<div class="review"><strong>${e(d.outcome.replaceAll("_", " "))}</strong><p class="prose">${e(d.comment)}</p><small>${date(d.answered_at)}</small></div>` : ""}${stale ? '<p class="notice">The shared brief has been revised. Request an updated decision before responding.</p>' : ""}${client && d.status === "pending" && !stale ? button("Respond to request", `respond-client-decision:${d.id}`, "") : ""}${!client && room!.role === "owner" && d.status === "pending" ? button("Cancel pending request", `cancel-client-decision:${d.id}`) : ""}</article>`;
+    })
     .join("");
   return `<div class="row between" data-layout="layout-2"><div><h2>${client ? "Your decisions" : "Client decision requests"}</h2><p class="muted">Responses belong to a named client and an exact request. They never approve engineering releases or create contracts.</p></div>${canRequest ? button("Request client decision", "new-client-decision", "") : ""}</div>${!client && room!.role === "owner" && !eligible.length ? `<p class="muted">Invite a client and confirm their project access before requesting a decision.</p>` : ""}<div class="stack">${list.length ? cards : empty("No client decisions yet.", client ? "A requested decision will appear here when Mizvo asks for your response." : "A decision request creates a durable record for a specific client.")}</div>`;
 }
@@ -388,13 +414,14 @@ function projectView() {
   const client = route.surface === "space",
     tab = route.tab;
   let main = "";
-  if (tab === "plan") main = tasks();
+  if (tab === "brief") main = livingBrief(client);
+  else if (tab === "plan") main = tasks();
   else if (tab === "decisions") main = clientDecisionView();
   else if (tab === "releases") main = releases();
   else if (["code", "tests"].includes(tab) && !client) main = workbench();
   else if (client) {
     if (tab === "room")
-      main = `<section class="card"><p class="eyebrow">Your project with Mizvo</p><h2 class="space-intro">A clear view of what comes next.</h2><p class="muted">${e(room!.project.scope || room!.project.purpose)}</p><div class="status-track">${["discovery", "design", "engineering", "review", "delivered"].map((x) => `<span class="${room!.project.status === x ? "current" : ""}">${e(x === "engineering" ? "Build" : x[0]!.toUpperCase() + x.slice(1))}</span>`).join("")}</div><a class="button secondary" href="${projectPath(route.project, "releases")}">Review shared versions ${icon("arrow")}</a></section><div data-layout="layout-7"></div>${recordFeed(room!.records, true)}`;
+      main = `<section class="card"><p class="eyebrow">Your project with Mizvo</p><h2 class="space-intro">One clear step at a time.</h2><p class="muted">${e(room!.brief?.outcome || room!.project.purpose)}</p>${(() => { const d = (room!.client_decisions ?? []).find((x: Data) => x.status === "pending" && (x.brief_version == null || x.brief_version === room!.brief?.version)); return d ? `<p class="notice">Your next decision: ${e(d.title)}. Review the exact request and version before responding.</p><a class="button" href="${projectPath(route.project, "decisions")}">Review requested decision ${icon("arrow")}</a>` : `<a class="button secondary" href="${projectPath(route.project, "releases")}">Review shared versions ${icon("arrow")}</a>`; })()}</section>${livingBrief(true)}<div data-layout="layout-7"></div>${recordFeed(room!.records, true)}`;
     else {
       const kind = tab === "support" ? "support" : "feedback";
       main = composer(true, kind) + recordFeed(room!.records, true);
@@ -404,7 +431,7 @@ function projectView() {
     const records = room!.records.filter(
       (r: Data) => !filter || r.kind === filter,
     );
-    main = `<div class="room-toolbar"><h2>${filter ? (filter === "note" ? "Project notes" : "Design context") : "Project conversation"}</h2><button class="quiet" data-action="inspector" aria-controls="context" aria-expanded="${innerWidth > 1200 ? !inspectorCollapsed : inspector}">Project context ${icon("menu")}</button></div>${recordFeed(records, false, empty(filter ? "Capture lasting project context." : "Welcome to your project Room.", "Write a note, share an update, or propose a decision. Saved records stay with this project."))}<div data-layout="layout-8"></div>${composer(false, filter || "discussion")}`;
+    main = (tab === "room" ? livingBrief(false) : "") + `<div class="room-toolbar"><h2>${filter ? (filter === "note" ? "Project notes" : "Design context") : "Project conversation"}</h2><button class="quiet" data-action="inspector" aria-controls="context" aria-expanded="${innerWidth > 1200 ? !inspectorCollapsed : inspector}">Project context ${icon("menu")}</button></div>${recordFeed(records, false, empty(filter ? "Capture lasting project context." : "Welcome to your project Room.", "Write a note, share an update, or propose a decision. Saved records stay with this project."))}<div data-layout="layout-8"></div>${composer(false, filter || "discussion")}`;
   }
   return (
     projectHeader() +
@@ -593,7 +620,9 @@ function clientDecisionForm() {
     `<label class="field">Client<select name="client_id" required>${active.map((m: Data) => `<option value="${e(m.user_id)}">${e(m.name)}</option>`).join("")}</select></label>` +
       field("Decision title", "title") +
       textarea("What exactly needs their decision?", "body") +
-      `<p class="notice">This request is addressed only to the selected project client. It does not make a legal promise or approve an engineering release.</p>`,
+      `<label class="field">Reviewed shared brief<select name="brief_version"><option value="">Unbound request</option>${room!.shared_brief_version ? `<option value="${room!.shared_brief_version}">Living Brief v${room!.shared_brief_version}</option>` : ""}</select></label>` +
+      `<label class="field">Related client-visible preview<select name="preview_release_id"><option value="">No preview attached</option>${room!.releases.filter((r: Data) => r.visibility === "client").map((r: Data) => `<option value="${e(r.id)}">${e(r.label)}</option>`).join("")}</select></label>` +
+      `<p class="notice">The optional brief and preview bind this request to an exact reviewed version. Client acceptance is not legal signoff, payment authorization or permission to deploy.</p>`,
     "Request decision",
   );
 }
@@ -856,6 +885,9 @@ async function action(value: string) {
       }
       break;
     }
+    case "revise-brief":
+      modal("Edit the Living Brief", briefForm());
+      break;
     case "new-client-decision":
       modal("Request a client decision", clientDecisionForm());
       break;
@@ -1168,6 +1200,7 @@ async function submit(f: HTMLFormElement) {
     data.review_required = data.review_required === "on";
   }
   if ("version" in data) data.version = Number(data.version);
+  if ("brief_version" in data && data.brief_version !== "") data.brief_version = Number(data.brief_version);
   switch (kind) {
     case "login": {
       const result = await api("/login", "POST", data);
@@ -1217,6 +1250,9 @@ async function submit(f: HTMLFormElement) {
         ...data,
         version: room!.project.version,
       });
+      break;
+    case "brief":
+      await api(`/projects/${route.project}/brief`, "POST", data);
       break;
     case "client-decision":
       await api(`/projects/${route.project}/client-decisions`, "POST", data);
