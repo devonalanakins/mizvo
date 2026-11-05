@@ -3565,10 +3565,15 @@ test("V0.17 delegated tasks enforce active membership, owner changes, date valid
     const engineer = await f.login(f.users.contributor.email);
     const client = await f.login(f.users.client.email);
     const p = (
-      await f.request("/projects", "POST", {
-        name: "Delegation",
-        purpose: "Deliver work through accountable people.",
-      }, founder)
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Delegation",
+          purpose: "Deliver work through accountable people.",
+        },
+        founder,
+      )
     ).value.id;
     const path = "/projects/" + p;
     for (const [user, session, role] of [
@@ -3576,23 +3581,40 @@ test("V0.17 delegated tasks enforce active membership, owner changes, date valid
       [f.users.client, client, "client"],
     ] as const) {
       const invitation = await f.request(
-        path + "/invitations", "POST", { email: user.email, role }, founder,
+        path + "/invitations",
+        "POST",
+        { email: user.email, role },
+        founder,
       );
       assert.equal(invitation.status, 201);
       assert.equal(
-        (await f.request("/invitations/accept", "POST", {
-          token: invitation.value.token,
-        }, session)).status,
+        (
+          await f.request(
+            "/invitations/accept",
+            "POST",
+            {
+              token: invitation.value.token,
+            },
+            session,
+          )
+        ).status,
         200,
       );
     }
     assert.equal(
-      (await f.request(path + "/tasks", "POST", {
-        title: "Assigned task",
-        assignee_id: f.users.contributor.id,
-        due_date: "2026-12-31",
-        visibility: "client",
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/tasks",
+          "POST",
+          {
+            title: "Assigned task",
+            assignee_id: f.users.contributor.id,
+            due_date: "2026-12-31",
+            visibility: "client",
+          },
+          founder,
+        )
+      ).status,
       201,
     );
     let room = (await f.request(path, "GET", undefined, founder)).value;
@@ -3600,133 +3622,258 @@ test("V0.17 delegated tasks enforce active membership, owner changes, date valid
     assert.equal(task.assignee_id, f.users.contributor.id);
     assert.equal(task.assignee_name, "Test Engineer");
     assert.equal(task.due_date, "2026-12-31");
-    let projection = (await f.request("/space/projects/" + p, "GET", undefined, client)).value;
+    let projection = (
+      await f.request("/space/projects/" + p, "GET", undefined, client)
+    ).value;
     assert.equal(projection.tasks.length, 1);
     assert.equal(projection.tasks[0].title, "Assigned task");
     assert.equal("assignee_id" in projection.tasks[0], false);
     assert.equal("assignee_name" in projection.tasks[0], false);
     assert.equal("due_date" in projection.tasks[0], false);
-    assert.equal(JSON.stringify(projection).includes(f.users.contributor.id), false);
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, assignee_id: f.users.owner.id,
-      }, engineer)).status,
+      JSON.stringify(projection).includes(f.users.contributor.id),
+      false,
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.owner.id,
+          },
+          engineer,
+        )
+      ).status,
       403,
     );
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, due_date: "2027-01-01",
-      }, engineer)).status,
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            due_date: "2027-01-01",
+          },
+          engineer,
+        )
+      ).status,
       403,
     );
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, status: "doing", assignee_id: undefined, due_date: undefined,
-      }, engineer)).status,
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            status: "doing",
+            assignee_id: undefined,
+            due_date: undefined,
+          },
+          engineer,
+        )
+      ).status,
       200,
     );
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", task, founder)).status,
+      (await f.request(path + "/tasks/" + task.id, "PATCH", task, founder))
+        .status,
       409,
       "Concurrent changes must reject an obsolete task version.",
     );
     task = (await f.request(path, "GET", undefined, founder)).value.tasks[0];
     assert.equal(task.status, "doing");
-    for (const invalid of ["2026-02-30", "2026-13-01", "12/31/2026", "2026-01-01T00:00"]) {
+    for (const invalid of [
+      "2026-02-30",
+      "2026-13-01",
+      "12/31/2026",
+      "2026-01-01T00:00",
+    ]) {
       assert.equal(
-        (await f.request(path + "/tasks/" + task.id, "PATCH", {
-          ...task, due_date: invalid,
-        }, founder)).status,
+        (
+          await f.request(
+            path + "/tasks/" + task.id,
+            "PATCH",
+            {
+              ...task,
+              due_date: invalid,
+            },
+            founder,
+          )
+        ).status,
         400,
       );
     }
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, assignee_id: f.users.client.id,
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.client.id,
+          },
+          founder,
+        )
+      ).status,
       400,
       "Client roles cannot receive internal assignments.",
     );
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, assignee_id: f.users.other.id,
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.other.id,
+          },
+          founder,
+        )
+      ).status,
       400,
       "Unrelated users cannot receive assignments.",
     );
     f.app.s.run(
       "UPDATE memberships SET expires_at='2000-01-01' WHERE project_id=? AND user_id=?",
-      p, f.users.contributor.id,
+      p,
+      f.users.contributor.id,
     );
     room = (await f.request(path, "GET", undefined, founder)).value;
     task = room.tasks[0];
-    assert.equal(task.assignee_id, null, "Expired access must hide an assignment.");
+    assert.equal(
+      task.assignee_id,
+      null,
+      "Expired access must hide an assignment.",
+    );
     assert.equal(task.assignee_name, null);
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, priority: "high",
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            priority: "high",
+          },
+          founder,
+        )
+      ).status,
       200,
       "The owner can clear obsolete assignments without losing the task.",
     );
     assert.equal(
-      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!.assignee_id,
+      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!
+        .assignee_id,
       null,
     );
     f.app.s.run(
       "UPDATE memberships SET expires_at=NULL WHERE project_id=? AND user_id=?",
-      p, f.users.contributor.id,
+      p,
+      f.users.contributor.id,
     );
     task = (await f.request(path, "GET", undefined, founder)).value.tasks[0];
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, assignee_id: f.users.contributor.id,
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.contributor.id,
+          },
+          founder,
+        )
+      ).status,
       200,
     );
     assert.equal(
-      (await f.request(path + "/members/" + f.users.contributor.id, "PATCH", {
-        role: "client",
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/members/" + f.users.contributor.id,
+          "PATCH",
+          {
+            role: "client",
+          },
+          founder,
+        )
+      ).status,
       200,
     );
     assert.equal(
-      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!.assignee_id,
+      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!
+        .assignee_id,
       null,
       "Downgrading a contributor to client must atomically unassign tasks.",
     );
     assert.equal(
-      (await f.request(path + "/members/" + f.users.contributor.id, "PATCH", {
-        role: "contributor",
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/members/" + f.users.contributor.id,
+          "PATCH",
+          {
+            role: "contributor",
+          },
+          founder,
+        )
+      ).status,
       200,
     );
     task = (await f.request(path, "GET", undefined, founder)).value.tasks[0];
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, assignee_id: f.users.contributor.id,
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.contributor.id,
+          },
+          founder,
+        )
+      ).status,
       200,
     );
     assert.equal(
-      (await f.request(path + "/members/" + f.users.contributor.id, "PATCH", {
-        revoke: true,
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/members/" + f.users.contributor.id,
+          "PATCH",
+          {
+            revoke: true,
+          },
+          founder,
+        )
+      ).status,
       200,
     );
     assert.equal(
-      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!.assignee_id,
+      f.app.s.get("SELECT assignee_id FROM tasks WHERE id=?", task.id)!
+        .assignee_id,
       null,
       "Revoking project membership must atomically unassign tasks.",
     );
     task = (await f.request(path, "GET", undefined, founder)).value.tasks[0];
     assert.equal(
-      (await f.request(path + "/tasks/" + task.id, "PATCH", {
-        ...task, assignee_id: f.users.contributor.id,
-      }, founder)).status,
+      (
+        await f.request(
+          path + "/tasks/" + task.id,
+          "PATCH",
+          {
+            ...task,
+            assignee_id: f.users.contributor.id,
+          },
+          founder,
+        )
+      ).status,
       400,
     );
-    projection = (await f.request("/space/projects/" + p, "GET", undefined, client)).value;
+    projection = (
+      await f.request("/space/projects/" + p, "GET", undefined, client)
+    ).value;
     assert.equal(projection.tasks[0].title, "Assigned task");
   } finally {
     await f.stop();
@@ -3748,17 +3895,30 @@ test("V0.17 migration preserves existing tasks and refuses older release schemas
     store = new Store(database, directory);
     store.run("INSERT INTO organizations VALUES ('old','Legacy')");
     const user = account(
-      store, "Legacy Founder", "legacy-delegation@example.test",
-      password, "old", "founder",
+      store,
+      "Legacy Founder",
+      "legacy-delegation@example.test",
+      password,
+      "old",
+      "founder",
     );
     const { Domain } = await import("../packages/domain/service.ts");
     const project = new Domain(store, "old").createProject(user.id, {
-      name: "Legacy delivery", purpose: "Preserve old task identity.",
+      name: "Legacy delivery",
+      purpose: "Preserve old task identity.",
     });
     store.run(
       "INSERT INTO tasks(id,project_id,title,milestone,status,priority,visibility,actor_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-      "task-v0-16", project.id, "Keep original task", "Plan", "todo",
-      "normal", "internal", user.id, "2026-01-01", "2026-01-01",
+      "task-v0-16",
+      project.id,
+      "Keep original task",
+      "Plan",
+      "todo",
+      "normal",
+      "internal",
+      user.id,
+      "2026-01-01",
+      "2026-01-01",
     );
     const before = store.get("SELECT * FROM tasks WHERE id='task-v0-16'")!;
     store.close();
