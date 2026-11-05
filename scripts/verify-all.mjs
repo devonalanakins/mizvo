@@ -19,7 +19,7 @@ const commands = [
   ["npm", ["run", "test:browser"]],
   ["npm", ["run", "test:browser"], { MIZVO_BROWSER: "webkit" }],
   ...(live ? [["npm", ["run", "verify:github"]]] : []),
-  ["npm", ["audit", "--omit=dev", "--audit-level=high", "--json"]],
+  ["npm", ["audit", "--json"]],
 ];
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 const sourceIdentity = {
