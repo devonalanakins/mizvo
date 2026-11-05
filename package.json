@@ -23,6 +23,7 @@
     "test:distribution": "node scripts/verify-distribution.mjs",
     "test:staging": "node scripts/staging-rehearsal.mjs",
     "test:tls": "node scripts/https-staging-rehearsal.mjs",
+    "test:container": "bash scripts/test-container.sh",
     "verify:all": "node scripts/verify-all.mjs",
     "artifact:create": "node scripts/artifact-proof.mjs create dist build-proof.json",
     "artifact:verify": "node scripts/artifact-proof.mjs verify dist build-proof.json"
