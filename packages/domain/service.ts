@@ -221,6 +221,7 @@ export class Domain {
       project,
     );
     const client_decisions = this.clientDecisions(user, project, client);
+    const brief = this.brief(user, project, client);
     const releases: Row[] = this.s
       .all(
         `SELECT * FROM releases WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at DESC,id`,
@@ -279,6 +280,7 @@ export class Domain {
           }),
         ),
         client_decisions,
+        brief,
         releases: releases.map(
           ({
             id,
@@ -316,6 +318,7 @@ export class Domain {
       tasks,
       milestones,
       client_decisions,
+      brief,
       releases,
       members: this.s.all(
         "SELECT m.role,m.user_id,m.expires_at,m.revoked_at,u.name,u.email FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.project_id=?",
@@ -332,6 +335,67 @@ export class Domain {
         ) ?? null,
     };
   }
+
+  // Each revision is immutable. Clients receive only the latest shared revision.
+  brief(user: string, project: string, client = false) {
+    const grant = membership(this.s, project, user, !client);
+    assert(
+      grant.organization_id === this.organization &&
+        (!client || grant.role === "client"),
+      404,
+      "Project not found.",
+    );
+    const row = this.s.get(
+      `SELECT * FROM project_brief_revisions WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY version DESC LIMIT 1`,
+      project,
+    );
+    if (!row) return null;
+    if (!client) return row;
+    const { version, problem, audience, outcome, exclusions, next_step, created_at } = row;
+    return { version, problem, audience, outcome, exclusions, next_step, created_at };
+  }
+  briefHistory(user: string, project: string) {
+    const grant = membership(this.s, project, user, true);
+    assert(grant.organization_id === this.organization, 404, "Project not found.");
+    return this.s.all(
+      "SELECT b.*,u.name AS actor FROM project_brief_revisions b JOIN users u ON u.id=b.actor_id WHERE b.project_id=? ORDER BY b.version DESC LIMIT 100",
+      project,
+    );
+  }
+  reviseBrief(user: string, project: string, b: Row) {
+    const grant = owner(this.s, project, user);
+    assert(grant.organization_id === this.organization, 404, "Project not found.");
+    const expected = b.version === 0 ? 0 : version(b.version);
+    const revision = {
+      id: id(),
+      problem: text(b.problem, "Problem", 2000),
+      audience: text(b.audience, "Audience", 1200),
+      outcome: text(b.outcome, "Outcome", 2000),
+      exclusions: text(b.exclusions ?? "", "Exclusions", 2500, 0),
+      next_step: text(b.next_step ?? "", "Next step", 1200, 0),
+      visibility: choice(b.visibility ?? "internal", ["internal", "client"], "brief visibility"),
+    };
+    return this.s.transaction(() => {
+      const current = this.s.get(
+        "SELECT version FROM project_brief_revisions WHERE project_id=? ORDER BY version DESC LIMIT 1",
+        project,
+      );
+      assert(
+        (current?.version ?? 0) === expected,
+        409,
+        "The Living Brief changed. Reload before editing.",
+      );
+      const stamp = now();
+      this.s.run(
+        "INSERT INTO project_brief_revisions(id,project_id,version,problem,audience,outcome,exclusions,next_step,visibility,actor_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        revision.id, project, expected + 1, revision.problem, revision.audience,
+        revision.outcome, revision.exclusions, revision.next_step,
+        revision.visibility, user, stamp,
+      );
+      this.audit(project, user, "brief.revised", revision.id);
+      return { ...revision, version: expected + 1, created_at: stamp };
+    });
+  }
   clientDecisions(user: string, project: string, client: boolean) {
     const grant = membership(this.s, project, user, !client);
     assert(
@@ -342,7 +406,7 @@ export class Domain {
     );
     if (client)
       return this.s.all(
-        "SELECT d.id,d.title,d.body,d.status,d.version,d.created_at,d.updated_at,r.outcome,r.comment,r.created_at AS answered_at FROM client_decision_requests d LEFT JOIN client_decision_responses r ON r.request_id=d.id WHERE d.project_id=? AND d.client_id=? ORDER BY d.created_at DESC,d.id",
+        "SELECT d.id,d.title,d.body,d.status,d.version,d.brief_version,d.preview_release_id,d.created_at,d.updated_at,r.outcome,r.comment,r.created_at AS answered_at FROM client_decision_requests d LEFT JOIN client_decision_responses r ON r.request_id=d.id WHERE d.project_id=? AND d.client_id=? ORDER BY d.created_at DESC,d.id",
         project,
         user,
       );
@@ -360,7 +424,15 @@ export class Domain {
     );
     const recipient = text(b.client_id, "Client", 100),
       title = text(b.title, "Decision request title", 200),
-      body = text(b.body, "Decision request", 6000);
+      body = text(b.body, "Decision request", 6000),
+      briefVersion =
+        b.brief_version === undefined || b.brief_version === ""
+          ? null
+          : version(b.brief_version),
+      previewRelease =
+        b.preview_release_id === undefined || b.preview_release_id === ""
+          ? null
+          : text(b.preview_release_id, "Preview release", 100);
     return this.s.transaction(() => {
       const active = this.s.get(
         "SELECT 1 FROM memberships WHERE project_id=? AND user_id=? AND role='client' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>?)",
@@ -369,10 +441,32 @@ export class Domain {
         now(),
       );
       assert(active, 400, "Select a client with active project access.");
+      if (briefVersion !== null) {
+        const shared = this.s.get(
+          "SELECT version FROM project_brief_revisions WHERE project_id=? AND visibility='client' ORDER BY version DESC LIMIT 1",
+          project,
+        );
+        assert(
+          shared?.version === briefVersion,
+          409,
+          "The shared Living Brief version changed. Reload and review it.",
+        );
+      }
+      if (previewRelease) {
+        assert(
+          this.s.get(
+            "SELECT id FROM releases WHERE id=? AND project_id=? AND visibility='client'",
+            previewRelease,
+            project,
+          ),
+          400,
+          "Select a client-visible preview from this project.",
+        );
+      }
       const request = id(),
         stamp = now();
       this.s.run(
-        "INSERT INTO client_decision_requests(id,project_id,client_id,actor_id,title,body,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO client_decision_requests(id,project_id,client_id,actor_id,title,body,created_at,updated_at,brief_version,preview_release_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
         request,
         project,
         recipient,
@@ -381,6 +475,8 @@ export class Domain {
         body,
         stamp,
         stamp,
+        briefVersion,
+        previewRelease,
       );
       this.audit(project, user, "client_decision.requested", request);
       return { id: request };
@@ -436,12 +532,23 @@ export class Domain {
       expected = version(b.version);
     this.s.transaction(() => {
       const r = this.s.get(
-        "SELECT version,status FROM client_decision_requests WHERE id=? AND project_id=? AND client_id=?",
+        "SELECT version,status,brief_version,preview_release_id FROM client_decision_requests WHERE id=? AND project_id=? AND client_id=?",
         request,
         project,
         user,
       );
       assert(r, 404, "Decision request not found.");
+      if (r.brief_version !== null) {
+        const current = this.s.get(
+          "SELECT version FROM project_brief_revisions WHERE project_id=? AND visibility='client' ORDER BY version DESC LIMIT 1",
+          project,
+        );
+        assert(
+          current?.version === r.brief_version,
+          409,
+          "The shared Living Brief has changed. Ask Mizvo for a new decision request.",
+        );
+      }
       assert(
         r.status === "pending" && r.version === expected,
         409,
