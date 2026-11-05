@@ -36,6 +36,10 @@ Open `http://localhost:4173/studio`. Use an address you actually control for a r
 
 See [self-hosting](docs/SELF-HOSTING.md), [security boundaries](docs/SECURITY.md), [verification](docs/VERIFICATION.md), [capability status](docs/STATUS.md), and [release/rollback](docs/RELEASE.md).
 
+## Review Mizvo privately with fictional data
+
+For an ephemeral, localhost-only Studio and Client Space session with a fictional founder, engineer and client, use `npm ci && npm run build && npm run review:local` in a **trusted interactive terminal**. All accounts and records are synthetic and discarded when the session ends. No mail, public hosting or customer data is involved. See [Local Review](docs/LOCAL-REVIEW.md). This is not a remotely accessible preview or a release approval.
+
 ## Verify
 
 ```sh
