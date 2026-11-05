@@ -439,26 +439,75 @@ function ownershipPanel(client = false) {
     ["Data export and handoff", v.export_plan || "Not specified"],
     ["Support boundaries", v.support_scope || "Not specified"],
   ];
-  const history = !client && room!.ownership_revisions?.length > 1
-    ? `<details><summary>Prior ownership plan revisions</summary><div class="stack">${room!.ownership_revisions.slice(1).map((r: Data) => `<p class="muted">Revision ${e(r.revision)} · ${e(r.visibility)} · ${date(r.created_at)} · ${e(ownershipModelLabels[r.hosting_model] ?? "Not selected")}</p>`).join("")}</div></details>`
-    : "";
+  const history =
+    !client && room!.ownership_revisions?.length > 1
+      ? `<details><summary>Prior ownership plan revisions</summary><div class="stack">${room!.ownership_revisions
+          .slice(1)
+          .map(
+            (r: Data) =>
+              `<p class="muted">Revision ${e(r.revision)} · ${e(r.visibility)} · ${date(r.created_at)} · ${e(ownershipModelLabels[r.hosting_model] ?? "Not selected")}</p>`,
+          )
+          .join("")}</div></details>`
+      : "";
   return `<section class="card" aria-label="Hosting and ownership plan"><div class="row between"><div><p class="eyebrow">Ownership and handoff · Revision ${e(v.revision)}</p><h2>Who controls what?</h2></div>${canEdit ? button("Revise ownership plan", "edit-ownership", "") : ""}</div><p class="notice">Proposal only · No account, domain, payment, backup, export, operational access or deployment has been verified by this record.</p>${!client ? `<p class="muted">${v.visibility === "client" ? "Shared with project clients." : "Internal draft; clients see the latest shared revision, if any."}</p>` : ""}<dl class="detail-list">${details.map(([label, value]) => `<dt>${e(label)}</dt><dd>${e(value)}</dd>`).join("")}</dl><small class="muted">Recorded ${date(v.created_at)} · Actual hosting and support terms require independent authorization.</small>${history}</section>`;
 }
 function ownershipForm() {
   const v = room!.ownership;
-  const options = Object.entries(ownershipModelLabels).map(([key, label]) =>
-    `<option value="${e(key)}" ${(v?.hosting_model ?? "undecided") === key ? "selected" : ""}>${e(label)}</option>`,
-  ).join("");
+  const options = Object.entries(ownershipModelLabels)
+    .map(
+      ([key, label]) =>
+        `<option value="${e(key)}" ${(v?.hosting_model ?? "undecided") === key ? "selected" : ""}>${e(label)}</option>`,
+    )
+    .join("");
   return form(
     "ownership-plan",
     `<label class="field">Proposed hosting arrangement<select name="hosting_model" required>${options}</select></label>` +
-      field("Planned domain (optional)", "planned_domain", v?.planned_domain ?? "", "text", false) +
-      field("Hosting account owner (optional)", "infrastructure_owner", v?.infrastructure_owner ?? "", "text", false) +
-      field("Provider billing owner (optional)", "billing_owner", v?.billing_owner ?? "", "text", false) +
-      field("Technical operator (optional)", "operator", v?.operator ?? "", "text", false) +
-      textarea("Data export and handoff plan (optional)", "export_plan", v?.export_plan ?? "", false) +
-      textarea("Support boundary (optional)", "support_scope", v?.support_scope ?? "", false) +
-      select("Share this plan with the client", "visibility", ["internal", "client"], v?.visibility ?? "internal") +
+      field(
+        "Planned domain (optional)",
+        "planned_domain",
+        v?.planned_domain ?? "",
+        "text",
+        false,
+      ) +
+      field(
+        "Hosting account owner (optional)",
+        "infrastructure_owner",
+        v?.infrastructure_owner ?? "",
+        "text",
+        false,
+      ) +
+      field(
+        "Provider billing owner (optional)",
+        "billing_owner",
+        v?.billing_owner ?? "",
+        "text",
+        false,
+      ) +
+      field(
+        "Technical operator (optional)",
+        "operator",
+        v?.operator ?? "",
+        "text",
+        false,
+      ) +
+      textarea(
+        "Data export and handoff plan (optional)",
+        "export_plan",
+        v?.export_plan ?? "",
+        false,
+      ) +
+      textarea(
+        "Support boundary (optional)",
+        "support_scope",
+        v?.support_scope ?? "",
+        false,
+      ) +
+      select(
+        "Share this plan with the client",
+        "visibility",
+        ["internal", "client"],
+        v?.visibility ?? "internal",
+      ) +
       `<input type="hidden" name="base_revision" value="${e(v?.revision ?? 0)}"><p class="notice">Planning record only. Do not enter credentials, payment details or private account identifiers. Saving does not create resources, sign a contract, verify backups or establish an SLA.</p>`,
     "Save ownership plan",
   );
