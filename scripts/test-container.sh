@@ -14,12 +14,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker build --file Dockerfile --tag "$image" .
-# Initial, read-only registry index inspection for choosing an immutable base.
-# Record the exact multi-arch digest, not a per-platform layer/image digest.
-echo "MIZVO_NODE_BASE_INDEX_BEGIN"
-docker buildx imagetools inspect docker.io/library/node:24-bookworm-slim | sed -n 's/^Digest:[[:space:]]*//p' | head -n 1
-echo "MIZVO_NODE_BASE_INDEX_END"
+# Source labels are exact checkout/tree identities. The OCI proof checks
+# copied image bytes independently against the existing built distribution.
+docker build --file Dockerfile --tag "$image" \
+  --build-arg "MIZVO_SOURCE_COMMIT=$(git rev-parse HEAD)" \
+  --build-arg "MIZVO_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" \
+  .
+node scripts/oci-image-proof.mjs "$image"
 
 MIZVO_ORIGIN=https://staging.example.invalid docker compose -f compose.staging.yaml config --quiet
 
