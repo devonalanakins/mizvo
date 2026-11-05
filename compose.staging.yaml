@@ -1,0 +1,33 @@
+# Private staging only. HTTPS must terminate in a reviewed host reverse proxy.
+# No public port is published; explicitly provide MIZVO_ORIGIN to compose.
+services:
+  mizvo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mizvo:private-stage
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    environment:
+      NODE_ENV: production
+      PORT: "4173"
+      MIZVO_BIND_HOST: 0.0.0.0
+      MIZVO_DATABASE: /var/lib/mizvo/mizvo.sqlite
+      MIZVO_ORGANIZATION: ${MIZVO_ORGANIZATION:-mizvo-stage}
+      MIZVO_ORIGIN: ${MIZVO_ORIGIN:?Set an approved HTTPS origin before starting}
+    ports:
+      - "127.0.0.1:4173:4173"
+    volumes:
+      - mizvo_state:/var/lib/mizvo
+volumes:
+  mizvo_state:
