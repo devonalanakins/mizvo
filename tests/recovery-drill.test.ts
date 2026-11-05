@@ -37,7 +37,11 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
   mkdirSync(privateRoot, { mode: 0o700 });
   const store = new Store(source);
   try {
-    store.run("INSERT INTO organizations VALUES (?,?)", "synthetic-org", "Synthetic Organization");
+    store.run(
+      "INSERT INTO organizations VALUES (?,?)",
+      "synthetic-org",
+      "Synthetic Organization",
+    );
     const user = account(
       store,
       "Private Test User",
@@ -59,7 +63,12 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
       stamp,
       stamp,
     );
-    store.run("INSERT INTO memberships VALUES (?,?,?,NULL,NULL)", project, user.id, "owner");
+    store.run(
+      "INSERT INTO memberships VALUES (?,?,?,NULL,NULL)",
+      project,
+      user.id,
+      "owner",
+    );
     store.run(
       "INSERT INTO sessions VALUES (?,?,?,?,?)",
       createHash("sha256").update("test-only-cookie").digest("hex"),
@@ -82,18 +91,25 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
       stamp,
     );
 
-    const backup = run(
-      ["scripts/backup.ts", snapshot],
-      { ...process.env, MIZVO_DATABASE: source },
-    );
+    const backup = run(["scripts/backup.ts", snapshot], {
+      ...process.env,
+      MIZVO_DATABASE: source,
+    });
     assert.equal(backup.status, 0, backup.stderr);
-    assert(existsSync(snapshot), "The online backup CLI should create a consistent snapshot.");
-    const before = createHash("sha256").update(readFileSync(snapshot)).digest("hex");
+    assert(
+      existsSync(snapshot),
+      "The online backup CLI should create a consistent snapshot.",
+    );
+    const before = createHash("sha256")
+      .update(readFileSync(snapshot))
+      .digest("hex");
 
     const result = run(["scripts/recovery-drill.ts", snapshot, privateRoot]);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Offline recovery rehearsal passed/);
-    const receipts = readdirSync(privateRoot).filter((name) => name.endsWith(".json"));
+    const receipts = readdirSync(privateRoot).filter((name) =>
+      name.endsWith(".json"),
+    );
     assert.equal(receipts.length, 1);
     const receiptPath = join(privateRoot, receipts[0]!);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
@@ -110,10 +126,20 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
     assert(!JSON.stringify(receipt).includes("PRIVATE_RECOVERY_CONTEXT"));
     assert(!JSON.stringify(receipt).includes("private@example.test"));
     assert(!JSON.stringify(receipt).includes("test-only-cookie"));
-    assert.equal(statSync(receiptPath).mode & 0o077, 0, "The receipt must not be public.");
-    assert.equal(createHash("sha256").update(readFileSync(snapshot)).digest("hex"), before);
+    assert.equal(
+      statSync(receiptPath).mode & 0o077,
+      0,
+      "The receipt must not be public.",
+    );
+    assert.equal(
+      createHash("sha256").update(readFileSync(snapshot)).digest("hex"),
+      before,
+    );
     assert.equal(store.get("SELECT COUNT(*) AS count FROM sessions")?.count, 1);
-    assert.equal(store.get("SELECT title FROM records WHERE project_id=?", project)?.title, "PRIVATE_RECOVERY_CONTEXT");
+    assert.equal(
+      store.get("SELECT title FROM records WHERE project_id=?", project)?.title,
+      "PRIVATE_RECOVERY_CONTEXT",
+    );
     assert(
       readdirSync(privateRoot).every((name) => name.endsWith(".json")),
       "The recovery drill must delete temporary database copies.",
@@ -124,7 +150,9 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
     const broken = new DatabaseSync(orphan);
     try {
       broken.exec("PRAGMA foreign_keys=OFF");
-      broken.prepare("INSERT INTO memberships VALUES (?,?,?,NULL,NULL)").run(project, randomUUID(), "client");
+      broken
+        .prepare("INSERT INTO memberships VALUES (?,?,?,NULL,NULL)")
+        .run(project, randomUUID(), "client");
     } finally {
       broken.close();
     }
@@ -136,11 +164,19 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
     copyFileSync(snapshot, wrongSchema);
     const incompatible = new DatabaseSync(wrongSchema);
     try {
-      incompatible.prepare("UPDATE migration_checksums SET checksum='bad' WHERE version=1").run();
+      incompatible
+        .prepare(
+          "UPDATE migration_checksums SET checksum='bad' WHERE version=1",
+        )
+        .run();
     } finally {
       incompatible.close();
     }
-    const rejected = run(["scripts/recovery-drill.ts", wrongSchema, privateRoot]);
+    const rejected = run([
+      "scripts/recovery-drill.ts",
+      wrongSchema,
+      privateRoot,
+    ]);
     assert.notEqual(rejected.status, 0);
     assert.match(rejected.stderr, /migration checksum/i);
 
@@ -149,7 +185,10 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
     const bytes = readFileSync(badCopy);
     bytes.fill(0, 0, 16);
     writeFileSync(badCopy, bytes);
-    assert.notEqual(run(["scripts/recovery-drill.ts", badCopy, privateRoot]).status, 0);
+    assert.notEqual(
+      run(["scripts/recovery-drill.ts", badCopy, privateRoot]).status,
+      0,
+    );
 
     const symlink = join(root, "link.sqlite");
     symlinkSync(snapshot, symlink);
@@ -159,7 +198,11 @@ test("isolated recovery drill verifies live-WAL snapshot and never alters or exp
 
     if (process.platform !== "win32") {
       chmodSync(privateRoot, 0o755);
-      const publicDirectory = run(["scripts/recovery-drill.ts", snapshot, privateRoot]);
+      const publicDirectory = run([
+        "scripts/recovery-drill.ts",
+        snapshot,
+        privateRoot,
+      ]);
       assert.notEqual(publicDirectory.status, 0);
       assert.match(publicDirectory.stderr, /mode 0700/i);
       chmodSync(privateRoot, 0o700);
