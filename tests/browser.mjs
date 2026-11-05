@@ -362,6 +362,21 @@ try {
     .getByRole("heading", { name: "Founder milestone checkpoint" })
     .waitFor();
   await capture(client, "client-milestones", 390);
+  await page.goto(config.origin + `/studio/projects/${project}?tab=decisions`);
+  await page.getByRole("button", { name: "Request client decision" }).click();
+  await page.getByLabel("Decision title").fill("Approve the onboarding description");
+  await page.getByLabel("What exactly needs their decision?")
+    .fill("Is this explanation clear and useful?");
+  await page.getByRole("button", { name: "Request decision" }).click();
+  await page.getByRole("heading", { name: "Approve the onboarding description" }).waitFor();
+  await client.goto(config.origin + `/space/projects/${project}?tab=decisions`);
+  await client.getByRole("heading", { name: "Approve the onboarding description" }).waitFor();
+  await capture(client, "client-decisions", 390);
+  await client.getByRole("button", { name: "Respond to request" }).click();
+  await client.getByLabel("Your decision").selectOption("accepted");
+  await client.getByLabel("Response and context").fill("The benefit is clear.");
+  await client.getByRole("button", { name: "Record response" }).click();
+  await client.getByText("The benefit is clear.").waitFor();
   await page.goto(config.origin + `/studio/projects/${project}?tab=releases`);
   await page
     .getByRole("heading", { name: "Verification version 1", exact: true })

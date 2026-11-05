@@ -220,6 +220,7 @@ export class Domain {
       `SELECT * FROM project_milestones WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY target_date IS NULL,target_date,created_at,id`,
       project,
     );
+    const client_decisions = this.clientDecisions(user, project, client);
     const releases: Row[] = this.s
       .all(
         `SELECT * FROM releases WHERE project_id=?${client ? " AND visibility='client'" : ""} ORDER BY created_at DESC,id`,
@@ -277,6 +278,7 @@ export class Domain {
             updated_at,
           }),
         ),
+        client_decisions,
         releases: releases.map(
           ({
             id,
@@ -313,6 +315,7 @@ export class Domain {
         ) ?? null,
       tasks,
       milestones,
+      client_decisions,
       releases,
       members: this.s.all(
         "SELECT m.role,m.user_id,m.expires_at,m.revoked_at,u.name,u.email FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.project_id=?",
@@ -328,6 +331,97 @@ export class Domain {
           project,
         ) ?? null,
     };
+  }
+  clientDecisions(user: string, project: string, client: boolean) {
+    const grant = membership(this.s, project, user, !client);
+    assert(
+      grant.organization_id === this.organization &&
+        (!client || grant.role === "client"),
+      404,
+      "Project not found.",
+    );
+    if (client)
+      return this.s.all(
+        "SELECT d.id,d.title,d.body,d.status,d.version,d.created_at,d.updated_at,r.outcome,r.comment,r.created_at AS answered_at FROM client_decision_requests d LEFT JOIN client_decision_responses r ON r.request_id=d.id WHERE d.project_id=? AND d.client_id=? ORDER BY d.created_at DESC,d.id",
+        project,
+        user,
+      );
+    return this.s.all(
+      "SELECT d.*,u.name AS recipient,r.outcome,r.comment,r.created_at AS answered_at,r.request_version FROM client_decision_requests d JOIN users u ON u.id=d.client_id LEFT JOIN client_decision_responses r ON r.request_id=d.id WHERE d.project_id=? ORDER BY d.created_at DESC,d.id",
+      project,
+    );
+  }
+  requestClientDecision(user: string, project: string, b: Row) {
+    const grant = owner(this.s, project, user);
+    assert(grant.organization_id === this.organization, 404, "Project not found.");
+    const recipient = text(b.client_id, "Client", 100),
+      title = text(b.title, "Decision request title", 200),
+      body = text(b.body, "Decision request", 6000);
+    return this.s.transaction(() => {
+      const active = this.s.get(
+        "SELECT 1 FROM memberships WHERE project_id=? AND user_id=? AND role='client' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>?)",
+        project,
+        recipient,
+        now(),
+      );
+      assert(active, 400, "Select a client with active project access.");
+      const request = id(), stamp = now();
+      this.s.run(
+        "INSERT INTO client_decision_requests(id,project_id,client_id,actor_id,title,body,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        request, project, recipient, user, title, body, stamp, stamp,
+      );
+      this.audit(project, user, "client_decision.requested", request);
+      return { id: request };
+    });
+  }
+  cancelClientDecision(user: string, project: string, request: string, b: Row) {
+    const grant = owner(this.s, project, user);
+    assert(grant.organization_id === this.organization, 404, "Project not found.");
+    this.s.transaction(() => {
+      const target = this.s.get(
+        "SELECT id FROM client_decision_requests WHERE id=? AND project_id=?",
+        request, project,
+      );
+      assert(target, 404, "Decision request not found.");
+      const updated = this.s.run(
+        "UPDATE client_decision_requests SET status='cancelled',version=version+1,updated_at=? WHERE id=? AND project_id=? AND status='pending' AND version=?",
+        now(), request, project, version(b.version),
+      );
+      assert(updated.changes, 409, "Request changed or already has a response.");
+      this.audit(project, user, "client_decision.cancelled", request);
+    });
+  }
+  respondClientDecision(user: string, project: string, request: string, b: Row) {
+    const grant = membership(this.s, project, user);
+    assert(
+      grant.organization_id === this.organization && grant.role === "client",
+      404, "Project not found.",
+    );
+    const outcome = choice(
+      b.outcome, ["accepted", "changes_requested"], "client outcome",
+    ), comment = text(b.comment, "Client response", 2000),
+      expected = version(b.version);
+    this.s.transaction(() => {
+      const r = this.s.get(
+        "SELECT version,status FROM client_decision_requests WHERE id=? AND project_id=? AND client_id=?",
+        request, project, user,
+      );
+      assert(r, 404, "Decision request not found.");
+      assert(
+        r.status === "pending" && r.version === expected,
+        409, "This exact request has changed or already been answered.",
+      );
+      const updated = this.s.run(
+        "UPDATE client_decision_requests SET status='answered',version=version+1,updated_at=? WHERE id=? AND project_id=? AND client_id=? AND version=? AND status='pending'",
+        now(), request, project, user, expected,
+      );
+      assert(updated.changes, 409, "Decision request changed. Reload before responding.");
+      this.s.run(
+        "INSERT INTO client_decision_responses(id,request_id,client_id,request_version,outcome,comment,created_at) VALUES (?,?,?,?,?,?,?)",
+        id(), request, user, expected, outcome, comment, now(),
+      );
+      this.audit(project, user, "client_decision.answered", request);
+    });
   }
   projectUpdate(user: string, project: string, b: Row) {
     owner(this.s, project, user);

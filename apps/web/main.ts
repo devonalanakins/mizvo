@@ -298,6 +298,7 @@ function projectHeader() {
     ? [
         ["room", "Overview"],
         ["plan", "Progress"],
+        ["decisions", "Decisions"],
         ["releases", "Reviews & files"],
         ["feedback", "Feedback"],
         ["support", "Support"],
@@ -305,6 +306,7 @@ function projectHeader() {
     : [
         ["room", "Room"],
         ["plan", "Plan"],
+        ["decisions", "Client decisions"],
         ["code", "Code"],
         ["design", "Design"],
         ["tests", "Tests"],
@@ -338,6 +340,19 @@ function tasks() {
   });
   return `<div class="row between" data-layout="layout-2"><div><h2>Plan / Milestones</h2><p class="muted">Concrete checkpoints, linked work, and explicit review.</p></div><div class="row">${canEdit ? button(`${icon("plus")} Add milestone`, "new-milestone", "") : ""}${studio ? button(`${icon("plus")} Add task`, "new-task", "") : ""}</div></div>${milestones.length ? `<div class="grid">${cards.join("")}</div>` : empty("No milestone checkpoints yet.", "The project owner can create a dated checkpoint and choose what to share with clients.")}<div class="divider"></div><h2>Tasks</h2>${list.length ? list.map((t: Data) => `<article class="task"><span>${icon(t.status === "done" ? "check" : "plan")}</span><div class="task-copy"><h3>${e(t.title)}</h3><small>${e(t.milestone)} ${t.depends_on ? "· Has a dependency" : ""}</small><div class="row" data-layout="layout-3">${badge(t.status)}${t.priority === "high" ? badge("high") : ""}</div>${t.evidence ? `<p class="prose muted" data-layout="layout-4">${e(t.evidence)}</p>` : ""}</div>${studio ? button("Update", `edit-task:${t.id}`) : ""}</article>`).join("") : empty("A clear plan starts with one step.", "Tasks and evidence remain available throughout this project.")}`;
 }
+function clientDecisionView() {
+  const client = route.surface === "space",
+    list = room!.client_decisions ?? [],
+    eligible = client ? [] : room!.members.filter(
+      (m: Data) => m.role === "client" && !m.revoked_at &&
+        (!m.expires_at || new Date(m.expires_at) > new Date()),
+    ),
+    canRequest = !client && room!.role === "owner" && eligible.length > 0;
+  const cards = list.map((d: Data) =>
+    `<article class="card"><div class="row between"><h3>${e(d.title)}</h3>${badge(d.status)}</div>${client ? "" : `<p class="muted">For ${e(d.recipient)}</p>`}<p class="prose">${e(d.body)}</p><small>Requested ${date(d.created_at)}</small>${d.outcome ? `<div class="review"><strong>${e(d.outcome.replaceAll("_", " "))}</strong><p class="prose">${e(d.comment)}</p><small>${date(d.answered_at)}</small></div>` : ""}${client && d.status === "pending" ? button("Respond to request", `respond-client-decision:${d.id}`, "") : ""}${!client && room!.role === "owner" && d.status === "pending" ? button("Cancel pending request", `cancel-client-decision:${d.id}`) : ""}</article>`
+  ).join("");
+  return `<div class="row between" data-layout="layout-2"><div><h2>${client ? "Your decisions" : "Client decision requests"}</h2><p class="muted">Responses belong to a named client and an exact request. They never approve engineering releases or create contracts.</p></div>${canRequest ? button("Request client decision", "new-client-decision", "") : ""}</div>${!client && room!.role === "owner" && !eligible.length ? `<p class="muted">Invite a client and confirm their project access before requesting a decision.</p>` : ""}<div class="stack">${list.length ? cards : empty("No client decisions yet.", client ? "A requested decision will appear here when Mizvo asks for your response." : "A decision request creates a durable record for a specific client.")}</div>`;
+}
 function releases() {
   return `<div class="row between" data-layout="layout-2"><div><h2>${route.surface === "space" ? "Your project versions" : "Delivery / Version records"}</h2><p class="muted">Each review belongs to one immutable version.</p></div>${room!.role === "owner" ? button(`${icon("plus")} Record version`, "new-release", "") : ""}</div>${room!.releases.length ? room!.releases.map((r: Data) => `<article class="card release" data-layout="layout-5"><div class="row between"><h2>${e(r.label)}</h2><small>${date(r.created_at)}</small></div><p class="prose">${e(r.summary)}</p>${route.surface === "studio" ? `<p class="version">Commit ${e(r.commit_sha)}</p><p class="muted">${r.source_evidence?.length ? "Source checked against GitHub. Artifacts and deployment are not verified." : "Source SHA is recorded but not verified against GitHub."}</p>${room!.role === "owner" ? button("Verify GitHub source", `verify-source:${r.id}`) : ""}${(r.source_evidence ?? []).map((v: Data) => `<section class="review"><strong>GitHub source verified</strong><p class="version">${e(v.repository)}<br>Commit ${e(v.commit_sha)}<br>Tree ${e(v.tree_sha)}</p><p>CI observed: ${e(v.ci_state.replaceAll("_", " "))}</p><small>${date(v.observed_at)} · ${e(room!.members.find((m: Data) => m.user_id === v.actor_id)?.name ?? "Project owner")}</small></section>`).join("")}<h3>Rollback</h3><p class="prose muted">${e(r.rollback)}</p>` : ""}<div class="row">${r.demo_url ? `<a class="button secondary" href="${e(r.demo_url)}" target="_blank" rel="noopener noreferrer">Open demonstration ${icon("arrow")}</a>` : ""}${r.artifact_url ? `<a class="button secondary" href="${e(r.artifact_url)}" target="_blank" rel="noopener noreferrer">Open deliverable ${icon("arrow")}</a>` : ""}${r.actor_id !== me!.user.id && !r.reviews.some((v: Data) => v.actor_id === me!.user.id) ? button("Review this version", `review-release:${r.id}`) : ""}</div>${r.reviews.map((v: Data) => `<div class="review"><div class="row"><strong>${e(v.actor)}</strong>${badge(v.outcome)}<small>${date(v.created_at)}</small></div><p class="prose">${e(v.comment)}</p></div>`).join("")}</article>`).join("") : empty("No version has been shared yet.", "Demonstrations and deliverables appear here when the project owner records a version.")}`;
 }
@@ -367,6 +382,7 @@ function projectView() {
     tab = route.tab;
   let main = "";
   if (tab === "plan") main = tasks();
+  else if (tab === "decisions") main = clientDecisionView();
   else if (tab === "releases") main = releases();
   else if (["code", "tests"].includes(tab) && !client) main = workbench();
   else if (client) {
@@ -385,7 +401,7 @@ function projectView() {
   }
   return (
     projectHeader() +
-    `<div class="room-layout ${client || inspectorCollapsed || ["plan", "code", "tests", "releases"].includes(tab) ? "inspector-hidden" : ""}"><section class="room-main">${main}</section>${client || ["plan", "code", "tests", "releases"].includes(tab) ? "" : inspectorPanel()}</div>`
+    `<div class="room-layout ${client || inspectorCollapsed || ["plan", "decisions", "code", "tests", "releases"].includes(tab) ? "inspector-hidden" : ""}"><section class="room-main">${main}</section>${client || ["plan", "decisions", "code", "tests", "releases"].includes(tab) ? "" : inspectorPanel()}</div>`
   );
 }
 async function overview() {
@@ -556,6 +572,34 @@ async function people(project: string) {
   modal(
     "Project people",
     `${data.members.map((m: Data) => `<div class="people-row">${avatar(m.name)}<div class="person"><h3>${e(m.name)}</h3><small>${e(m.email)}${m.expires_at ? ` · access until ${date(m.expires_at)}` : ""}</small><div>${badge(m.revoked_at ? "revoked" : m.role)}</div></div>${data.role === "owner" && m.role !== "owner" && !m.revoked_at ? button("Revoke", `revoke-member:${project}:${m.user_id}`, "danger") + button(m.role === "client" ? "Make contributor" : "Make client", `role-member:${project}:${m.user_id}:${m.role === "client" ? "contributor" : "client"}`) : ""}</div>`).join("")}${pending.map((i: Data) => `<div class="people-row"><div class="person"><strong>${e(i.email)}</strong><br><small>${e(i.role)} · ${i.revoked_at ? "Revoked" : i.accepted_at ? "Accepted" : new Date(i.expires_at) < new Date() ? "Expired" : "Pending"} · expires ${date(i.expires_at)}</small></div>${!i.accepted_at && !i.revoked_at ? button("Revoke", `revoke-invite:${project}:${i.id}`, "danger") : ""}</div>`).join("")}${data.role === "owner" ? button("Create project invitation", `invite:${project}`, "") : ""}`,
+  );
+}
+function clientDecisionForm() {
+  const active = room!.members.filter(
+    (m: Data) => m.role === "client" && !m.revoked_at &&
+      (!m.expires_at || new Date(m.expires_at) > new Date()),
+  );
+  return form(
+    "client-decision",
+    `<label class="field">Client<select name="client_id" required>${active.map((m: Data) => `<option value="${e(m.user_id)}">${e(m.name)}</option>`).join("")}</select></label>` +
+      field("Decision title", "title") +
+      textarea("What exactly needs their decision?", "body") +
+      `<p class="notice">This request is addressed only to the selected project client. It does not make a legal promise or approve an engineering release.</p>`,
+    "Request decision",
+  );
+}
+function clientDecisionResponseForm(d: Data) {
+  return form(
+    `client-response:${d.id}`,
+    select(
+      "Your decision",
+      "outcome",
+      ["accepted", "changes_requested"],
+      "changes_requested",
+    ) +
+      textarea("Response and context", "comment") +
+      `<input type="hidden" name="version" value="${d.version}"><p class="notice">Your response is recorded against the exact text of this request and is not a legal signature.</p>`,
+    "Record response",
   );
 }
 function milestoneForm(m?: Data) {
@@ -800,6 +844,27 @@ async function action(value: string) {
         );
         await render();
         toast("Decision outcome recorded.");
+      }
+      break;
+    }
+    case "new-client-decision":
+      modal("Request a client decision", clientDecisionForm());
+      break;
+    case "respond-client-decision": {
+      const request = room!.client_decisions.find((x: Data) => x.id === a);
+      modal("Respond to a decision request", clientDecisionResponseForm(request));
+      break;
+    }
+    case "cancel-client-decision": {
+      const request = room!.client_decisions.find((x: Data) => x.id === a);
+      if (confirm("Cancel this pending client request? Its record remains visible.")) {
+        await api(
+          `/projects/${route.project}/client-decisions/${a}/cancel`,
+          "POST",
+          { version: request.version },
+        );
+        await render();
+        toast("Decision request cancelled.");
       }
       break;
     }
@@ -1136,6 +1201,16 @@ async function submit(f: HTMLFormElement) {
         ...data,
         version: room!.project.version,
       });
+      break;
+    case "client-decision":
+      await api(`/projects/${route.project}/client-decisions`, "POST", data);
+      break;
+    case "client-response":
+      await api(
+        `/space/projects/${route.project}/client-decisions/${a}/respond`,
+        "POST",
+        data,
+      );
       break;
     case "milestone":
     case "edit-milestone":

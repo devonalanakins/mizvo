@@ -1622,6 +1622,7 @@ test("release-source migration upgrades an existing V0.5 database without changi
       assert(s.get("SELECT 1 FROM migrations WHERE version=2"));
       assert(s.get("SELECT 1 FROM migrations WHERE version=3"));
       assert(s.get("SELECT 1 FROM migrations WHERE version=4"));
+      assert(s.get("SELECT 1 FROM migrations WHERE version=5"));
     } finally {
       s.close();
     }
@@ -2179,6 +2180,86 @@ test("versioned milestones enforce owner rights, project isolation and safe clie
       ).status,
       409,
     );
+  } finally {
+    await f.stop();
+  }
+});
+
+test("targeted client decisions keep request versions, recipient isolation and internal approvals independent", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email),
+      client = await f.login(f.users.client.email),
+      other = await f.login(f.users.other.email);
+    const project = (await f.request("/projects", "POST", {
+      name: "Client decisions", purpose: "Ask an assigned client for an explicit response."
+    }, founder)).value.id, path = "/projects/" + project;
+    for (const [email, session] of [[f.users.client.email,client],[f.users.other.email,other]] as const) {
+      const invite = (await f.request(path + "/invitations", "POST", {
+        email, role: "client"
+      }, founder)).value;
+      assert.equal((await f.request("/invitations/accept", "POST", {
+        token: invite.token
+      }, session)).status, 200);
+    }
+    const internal = (await f.request(path + "/records","POST", {
+      kind: "decision", title: "Internal proposal", body: "Independent engineering judgment"
+    }, founder)).value.id;
+    const requested = await f.request(path + "/client-decisions","POST", {
+      client_id: f.users.client.id, title: "Confirm onboarding language",
+      body: "Does this explain the benefit clearly?"
+    }, founder);
+    assert.equal(requested.status, 201);
+    assert.equal((await f.request(path + "/client-decisions","POST", {
+      client_id: f.users.contributor.id, title: "Wrong role", body: "Not a client"
+    }, founder)).status, 400);
+    assert.equal((await f.request(path + "/client-decisions","POST", {
+      client_id: f.users.other.id, title: "Forged", body: "Not allowed"
+    }, client)).status, 404);
+    const clientRoom = await f.request("/space" + path,"GET",undefined,client);
+    const otherRoom = await f.request("/space" + path,"GET",undefined,other);
+    assert.equal(clientRoom.value.client_decisions.length, 1);
+    assert.equal(otherRoom.value.client_decisions.length, 0);
+    assert(!JSON.stringify(clientRoom.value.client_decisions).includes("client_id"));
+    const response = "/space" + path + "/client-decisions/" + requested.value.id + "/respond";
+    assert.equal((await f.request(response,"POST",{
+      outcome: "accepted", comment: "Other client", version: 1
+    },other)).status, 404);
+    assert.equal((await f.request(response,"POST",{
+      outcome: "accepted", comment: "Founder", version: 1
+    },founder)).status, 404);
+    assert.equal((await f.request(response,"POST",{
+      outcome: "accepted", comment: "Clear and useful.", version: 1
+    },client)).status, 200);
+    assert.equal((await f.request(response,"POST",{
+      outcome: "changes_requested", comment: "Replay", version: 1
+    },client)).status, 409);
+    const after=(await f.request(path,"GET",undefined,founder)).value;
+    const answer=after.client_decisions.find((x: any)=>x.id===requested.value.id);
+    assert.equal(answer.version,2);
+    assert.equal(answer.status,"answered");
+    assert.equal(answer.outcome,"accepted");
+    assert.equal(answer.request_version,1);
+    assert.equal(after.records.find((r: any)=>r.id===internal).state,"proposed");
+    assert.equal((await f.request(path+"/client-decisions/"+requested.value.id+"/cancel","POST",{
+      version:2
+    },founder)).status,409);
+    const pending=(await f.request(path+"/client-decisions","POST",{
+      client_id:f.users.client.id,title:"Withdraw request",body:"No longer needed"
+    },founder)).value.id;
+    assert.equal((await f.request(path+"/client-decisions/"+pending+"/cancel","POST",{
+      version:1
+    },founder)).status,200);
+    assert.equal((await f.request("/space"+path+"/client-decisions/"+pending+"/respond","POST",{
+      outcome:"accepted",comment:"Too late",version:1
+    },client)).status,409);
+    assert.equal(f.app.s.get("SELECT COUNT(*) AS count FROM client_decision_responses WHERE request_id=?",requested.value.id)?.count,1);
+    const otherProject=(await f.request("/projects","POST",{
+      name:"Other project",purpose:"Isolation check"
+    },founder)).value.id;
+    assert.equal((await f.request("/projects/"+otherProject+"/client-decisions/"+requested.value.id+"/cancel","POST",{
+      version:1
+    },founder)).status,404);
   } finally {
     await f.stop();
   }
