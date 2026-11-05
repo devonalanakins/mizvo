@@ -37,8 +37,6 @@ test("OCI base guard rejects mutable, split and extra stage definitions", () => 
   ].join("\n");
   assert.doesNotThrow(() => pinnedStages(valid));
   assert.throws(() => pinnedStages(valid.replace(a, b)));
-  assert.throws(
-    () => pinnedStages(valid.replace("@sha256:" + a, "")),
-  );
+  assert.throws(() => pinnedStages(valid.replace("@sha256:" + a, "")));
   assert.throws(() => pinnedStages(valid + "\nFROM alpine:latest AS third"));
 });
