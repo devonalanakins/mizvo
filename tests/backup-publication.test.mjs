@@ -37,7 +37,9 @@ test("backup is privately staged, integrity-checked, exclusively published and n
   try {
     db.exec("PRAGMA journal_mode=WAL");
     db.exec("CREATE TABLE notes (value TEXT NOT NULL)");
-    db.prepare("INSERT INTO notes (value) VALUES (?)").run("Sensitive synthetic record");
+    db.prepare("INSERT INTO notes (value) VALUES (?)").run(
+      "Sensitive synthetic record",
+    );
     const destination = join(output, "safe.sqlite");
     await backup(source, destination);
 

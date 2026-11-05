@@ -15,7 +15,8 @@ import {
 
 const [destination, ...extra] = process.argv.slice(2);
 const source = process.env.MIZVO_DATABASE ?? "var/mizvo.sqlite";
-const usage = "Provide an existing regular source database and one new backup destination.";
+const usage =
+  "Provide an existing regular source database and one new backup destination.";
 
 if (!destination || extra.length || resolve(source) === resolve(destination)) {
   console.error(usage);
@@ -52,7 +53,9 @@ try {
       const journal = check.prepare("PRAGMA journal_mode=DELETE").get();
       if (journal?.journal_mode !== "delete")
         throw new Error("Backup could not be detached from WAL journal mode.");
-      if (check.prepare("PRAGMA integrity_check").get()?.integrity_check !== "ok")
+      if (
+        check.prepare("PRAGMA integrity_check").get()?.integrity_check !== "ok"
+      )
         throw new Error("Backup integrity check failed.");
       if (check.prepare("PRAGMA foreign_key_check").all().length !== 0)
         throw new Error("Backup foreign key verification failed.");
