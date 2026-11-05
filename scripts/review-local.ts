@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { application, type Config } from "../apps/api/server.ts";
 import { account } from "../packages/authz/security.ts";
