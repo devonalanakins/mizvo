@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { Store, type Row } from "../../packages/storage/database.ts";
 import { Domain } from "../../packages/domain/service.ts";
 import { GitHub } from "./github.ts";
+import { PreviewProbe } from "./preview.ts";
 import {
   id,
   now,
@@ -36,16 +37,21 @@ export interface Config {
   staticRoot?: string;
   githubRepositories?: string[];
   githubToken?: string;
+  previewUrls?: string[];
 }
 export function application(
   config: Config,
-  dependencies: { github?: GitHub } = {},
+  dependencies: { github?: GitHub; previewFetch?: typeof fetch } = {},
 ) {
   const s = new Store(config.database),
     d = new Domain(s, config.organization),
     github =
       dependencies.github ??
-      new GitHub(config.githubRepositories ?? [], config.githubToken);
+      new GitHub(config.githubRepositories ?? [], config.githubToken),
+    previewProbe = new PreviewProbe(
+      config.previewUrls ?? [],
+      dependencies.previewFetch,
+    );
   s.run(
     "INSERT OR IGNORE INTO organizations VALUES (?,?)",
     config.organization,
@@ -492,16 +498,25 @@ export function application(
       );
       if (tail === "" && method === "GET") {
         const params = new URL(req.url!, config.origin).searchParams;
+        const view = d.room(user, project, client, {
+          before: params.get("before") ?? undefined,
+          kind: params.get("kind") ?? undefined,
+          limit: params.has("limit")
+            ? Number(params.get("limit"))
+            : undefined,
+        });
         send(
           res,
           200,
-          d.room(user, project, client, {
-            before: params.get("before") ?? undefined,
-            kind: params.get("kind") ?? undefined,
-            limit: params.has("limit")
-              ? Number(params.get("limit"))
-              : undefined,
-          }),
+          client
+            ? view
+            : {
+                ...view,
+                releases: view.releases.map((r) => ({
+                  ...r,
+                  preview_probe_allowed: previewProbe.allows(r.demo_url),
+                })),
+              },
         );
         return;
       }
@@ -685,6 +700,36 @@ export function application(
         send(res, 201, d.release(user, project, await body(req)));
         return;
       }
+      const observePreview = tail.match(
+        /^\/releases\/([^/]+)\/observe-preview$/,
+      );
+      if (observePreview && method === "POST" && !client) {
+        owner(s, project, user);
+        rate(s, `preview:${user}`, 6, 60000);
+        const release = s.get(
+          "SELECT demo_url,commit_sha FROM releases WHERE id=? AND project_id=?",
+          observePreview[1]!,
+          project,
+        );
+        assert(release, 404, "Release not found.");
+        assert(
+          previewProbe.allows(release.demo_url),
+          409,
+          "Preview checks are disabled for this URL. The administrator must configure an exact public HTTPS URL first.",
+        );
+        const observation = await previewProbe.observe(
+          release.demo_url,
+          release.commit_sha,
+        );
+        const receipt = d.recordPreviewObservation(
+          user,
+          project,
+          observePreview[1]!,
+          observation,
+        );
+        send(res, 201, { id: receipt, ...observation });
+        return;
+      }
       const verifySource = tail.match(/^\/releases\/([^/]+)\/verify-source$/);
       if (verifySource && method === "POST" && !client) {
         owner(s, project, user);
@@ -832,6 +877,10 @@ if (
       .split(",")
       .filter(Boolean),
     githubToken: process.env.MIZVO_GITHUB_TOKEN,
+    previewUrls: (process.env.MIZVO_PREVIEW_URLS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   });
   app.server.listen(port, "127.0.0.1", () =>
     console.log(`Mizvo listening at http://localhost:${port}`),

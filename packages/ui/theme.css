@@ -1552,7 +1552,7 @@ pre {
 }
 .proof-steps {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .proof-steps > div {
@@ -1589,4 +1589,25 @@ pre {
   .brief-statement {
     font-size: 31px;
   }
+}
+
+.proof-summary h2 {
+  font: 400 clamp(24px, 2.7vw, 34px)/1.2 Editorial, Georgia, serif;
+  margin: 6px 0 8px;
+}
+.proof-steps > div {
+  min-height: 65px;
+}
+.preview-receipt {
+  margin: 12px 0;
+  padding: 12px 15px;
+  border-left: 2px solid #8a644c;
+  background: #181b1f;
+  border-radius: 0 8px 8px 0;
+}
+.preview-receipt strong {
+  font-size: 13px;
+}
+.preview-receipt p {
+  margin: 5px 0 0;
 }

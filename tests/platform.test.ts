@@ -8,16 +8,21 @@ import { application, type Config } from "../apps/api/server.ts";
 import { account } from "../packages/authz/security.ts";
 import { Store } from "../packages/storage/database.ts";
 import { GitHub } from "../apps/api/github.ts";
+import { PreviewProbe } from "../apps/api/preview.ts";
 const password = "Independent-Test-Password-2026";
-async function fixture(github?: GitHub) {
+async function fixture(
+  github?: GitHub,
+  preview?: { urls: string[]; transport: typeof fetch },
+) {
   const dir = mkdtempSync(join(tmpdir(), "mizvo-"));
   const config: Config = {
     database: join(dir, "data.sqlite"),
     origin: "http://localhost",
     organization: "test-org",
     githubRepositories: ["devonalanakins/mizvo"],
+    previewUrls: preview?.urls,
   };
-  const app = application(config, { github });
+  const app = application(config, { github, previewFetch: preview?.transport });
   const users = {
     owner: account(
       app.s,
@@ -1624,6 +1629,7 @@ test("release-source migration upgrades an existing V0.5 database without changi
       assert(s.get("SELECT 1 FROM migrations WHERE version=4"));
       assert(s.get("SELECT 1 FROM migrations WHERE version=5"));
       assert(s.get("SELECT 1 FROM migrations WHERE version=6"));
+      assert(s.get("SELECT 1 FROM migrations WHERE version=7"));
     } finally {
       s.close();
     }
@@ -2910,6 +2916,212 @@ test("Living Brief preserves private revisions, client-safe projection, exact pr
     const own = (await f.request(path, "GET", undefined, founder)).value;
     assert.equal(own.brief.revision, 4);
     assert.equal(own.brief_revisions.length, 4);
+  } finally {
+    await f.stop();
+  }
+});
+
+test("preview probe requires administrator exact public HTTPS allowlist and never follows redirects", async () => {
+  const target = "https://preview.example.org/check";
+  for (const bad of [
+    "http://preview.example.org/check",
+    "https://127.0.0.1/check",
+    "https://[::1]/",
+    "https://localhost/ready",
+    "https://service.internal/check",
+    "https://service.example/check",
+    "https://preview.example.org/check?token=secret",
+    "https://preview.example.org/check#hash",
+    "https://preview.example.org:8443/check",
+    "https://user:password@preview.example.org/check",
+  ]) {
+    assert.throws(() => new PreviewProbe([bad]), "Invalid configured URL: " + bad);
+  }
+  let mode = "ok", count = 0;
+  const probe = new PreviewProbe([target], (async (input: any, options: any) => {
+    count++;
+    assert.equal(String(input), target);
+    assert.equal(options.method, "HEAD");
+    assert.equal(options.redirect, "manual");
+    assert.equal(options.credentials, "omit");
+    assert.equal(options.cache, "no-store");
+    assert.equal(options.headers.Accept, "text/html");
+    if (mode === "network") throw new Error("INTERNAL_PRIVATE_TRANSPORT_DETAILS");
+    if (mode === "redirect")
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://untrusted.example.org/private" },
+      });
+    if (mode === "error") return new Response(null, { status: 503 });
+    return new Response(null, {
+      status: 200,
+      headers: { "X-Mizvo-Source-Commit": mode === "wrong" ? "b".repeat(40) : "a".repeat(40) },
+    });
+  }) as typeof fetch);
+  assert.equal(probe.allows(target), true);
+  for (const notAllowed of [
+    "https://untrusted.example.org/private",
+    "https://preview.example.org/check/other",
+    "https://preview.example.org/secret",
+    "https://preview.example.org/check?token=x",
+    "http://preview.example.org/check",
+  ]) {
+    assert.equal(probe.allows(notAllowed), false);
+    await assert.rejects(() => probe.observe(notAllowed, "a".repeat(40)));
+  }
+  assert.equal(count, 0, "No outbound requests for unconfigured targets");
+  const expected = "a".repeat(40);
+  let observed = await probe.observe(target, expected);
+  assert.equal(observed.result, "reachable");
+  assert.equal(observed.http_status, 200);
+  assert.equal(observed.reported_commit, expected);
+  assert.equal(observed.commit_matches, 1);
+  mode = "wrong";
+  observed = await probe.observe(target, expected);
+  assert.equal(observed.result, "reachable");
+  assert.equal(observed.commit_matches, 0);
+  mode = "redirect";
+  observed = await probe.observe(target, expected);
+  assert.equal(observed.result, "redirect_denied");
+  assert.equal(observed.http_status, 302);
+  mode = "error";
+  observed = await probe.observe(target, expected);
+  assert.equal(observed.result, "http_error");
+  assert.equal(observed.http_status, 503);
+  mode = "network";
+  observed = await probe.observe(target, expected);
+  assert.equal(observed.result, "network_error");
+  assert.equal(observed.http_status, null);
+  assert(!JSON.stringify(observed).includes("INTERNAL_PRIVATE_TRANSPORT_DETAILS"));
+  assert.equal(count, 5);
+});
+
+test("preview observations preserve exact release binding, reauthorize after I/O, and project-specific client privacy", async () => {
+  const target = "https://preview.example.org/check";
+  const wrongUrl = "https://preview.example.org/other";
+  const sha = "a".repeat(40);
+  let mode = "ok";
+  let onRequest: (() => void) | undefined;
+  let hits = 0;
+  const transport = (async (input: any, options: any) => {
+    hits++;
+    assert.equal(String(input), target);
+    assert.equal(options.method, "HEAD");
+    assert.equal(options.redirect, "manual");
+    onRequest?.();
+    if (mode === "network") throw new Error("private host info");
+    if (mode === "redirect") return new Response(null, { status: 302 });
+    if (mode === "error") return new Response(null, { status: 503 });
+    return new Response(null, {
+      status: 200,
+      headers: { "X-Mizvo-Source-Commit": mode === "wrong" ? "b".repeat(40) : sha },
+    });
+  }) as typeof fetch;
+  const f = await fixture(undefined, { urls: [target], transport });
+  try {
+    const founder = await f.login(f.users.owner.email),
+      contributor = await f.login(f.users.contributor.email),
+      client = await f.login(f.users.client.email),
+      otherClient = await f.login(f.users.other.email);
+    const project = (await f.request("/projects", "POST", {
+      name: "Observed Preview", purpose: "Show recorded proof honestly."
+    }, founder)).value.id;
+    const path = "/projects/" + project;
+    for (const [person, role, session] of [
+      [f.users.contributor, "contributor", contributor],
+      [f.users.client, "client", client],
+    ] as const) {
+      const invite = (await f.request(path + "/invitations", "POST", {
+        email: person.email, role,
+      }, founder)).value;
+      assert.equal((await f.request("/invitations/accept", "POST", {
+        token: invite.token
+      }, session)).status, 200);
+    }
+    const release = (await f.request(path + "/releases", "POST", {
+      label: "Staging preview candidate", summary: "Recorded version, not deployed.",
+      commit_sha: sha, demo_url: target, visibility: "client",
+      rollback: "Return to previous version.",
+    }, founder)).value.id;
+    const unallowed = (await f.request(path + "/releases", "POST", {
+      label: "Unconfigured demo URL", summary: "Not in the administrator allowlist.",
+      commit_sha: sha, demo_url: wrongUrl, visibility: "client",
+      rollback: "No action.",
+    }, founder)).value.id;
+    const internal = (await f.request(path + "/releases", "POST", {
+      label: "Private preview", summary: "Private evidence.",
+      commit_sha: sha, demo_url: target, visibility: "internal",
+      rollback: "No action.",
+    }, founder)).value.id;
+    const otherProject = (await f.request("/projects", "POST", {
+      name: "Unrelated", purpose: "Do not leak evidence.",
+    }, founder)).value.id;
+    const check = path + "/releases/" + release + "/observe-preview";
+    assert.equal((await f.request(check, "POST", {}, contributor)).status, 403);
+    assert.equal((await f.request("/space" + check, "POST", {}, client)).status, 404);
+    assert.equal((await f.request(check, "POST", {}, otherClient)).status, 404);
+    assert.equal((await f.request("/projects/" + otherProject + "/releases/" + release + "/observe-preview", "POST", {}, founder)).status, 404);
+    assert.equal((await f.request(path + "/releases/" + unallowed + "/observe-preview", "POST", {}, founder)).status, 409);
+    assert.equal(hits, 0, "Unauthorized and unconfigured attempts make no request");
+    let response = await f.request(check, "POST", { result: "production_observed" }, founder);
+    assert.equal(response.status, 201);
+    assert.equal(response.value.result, "reachable");
+    assert.equal(response.value.expected_commit, sha);
+    assert.equal(response.value.commit_matches, 1);
+    assert.equal(hits, 1);
+    let ownerRoom = (await f.request(path, "GET", undefined, founder)).value;
+    const releaseOwner = ownerRoom.releases.find((r: any) => r.id === release);
+    assert.equal(releaseOwner.preview_probe_allowed, true);
+    assert.equal(releaseOwner.preview_observations[0].expected_commit, sha);
+    assert.equal(ownerRoom.releases.find((r: any) => r.id === unallowed).preview_probe_allowed, false);
+    const clientRoom = (await f.request("/space" + path, "GET", undefined, client)).value;
+    const releaseClient = clientRoom.releases.find((r: any) => r.id === release);
+    assert.equal(releaseClient.preview_observations[0].result, "reachable");
+    assert.equal(releaseClient.preview_observations[0].http_status, 200);
+    assert(!JSON.stringify(releaseClient.preview_observations).includes("actor_id"));
+    assert(!JSON.stringify(clientRoom).includes("commit_matches"));
+    assert(!JSON.stringify(clientRoom).includes("reported_commit"));
+    assert(!JSON.stringify(clientRoom).includes("preview_probe_allowed"));
+    assert(!JSON.stringify(clientRoom).includes("Private preview"));
+    assert.equal((await f.request("/space" + path, "GET", undefined, otherClient)).status, 404);
+    const reopened = new Store(f.config.database);
+    try {
+      assert.equal(reopened.get("SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",release)?.count,1);
+      assert.equal(reopened.get("SELECT actor_id FROM preview_observations WHERE release_id=?",release)?.actor_id,f.users.owner.id);
+      assert.equal(reopened.get("SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",internal)?.count,0);
+    } finally {
+      reopened.close();
+    }
+    mode = "wrong";
+    response = await f.request(check, "POST", {}, founder);
+    assert.equal(response.status, 201);
+    assert.equal(response.value.commit_matches, 0);
+    assert.equal(response.value.result, "reachable");
+    mode = "redirect";
+    response = await f.request(check, "POST", {}, founder);
+    assert.equal(response.status, 201);
+    assert.equal(response.value.result, "redirect_denied");
+    mode = "network";
+    response = await f.request(check, "POST", {}, founder);
+    assert.equal(response.status, 201);
+    assert.equal(response.value.result, "network_error");
+    assert(!JSON.stringify(response.value).includes("private host info"));
+    f.app.s.run("DELETE FROM rate_limits WHERE key=?", "preview:" + f.users.owner.id);
+    onRequest = () => f.app.s.run(
+      "UPDATE releases SET demo_url=? WHERE id=?",
+      wrongUrl, release,
+    );
+    mode = "ok";
+    assert.equal((await f.request(check, "POST", {}, founder)).status, 409);
+    assert.equal(f.app.s.get("SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",release)?.count,4);
+    f.app.s.run("UPDATE releases SET demo_url=? WHERE id=?",target,release);
+    onRequest = () => f.app.s.run(
+      "UPDATE memberships SET revoked_at=? WHERE project_id=? AND user_id=?",
+      new Date().toISOString(), project, f.users.owner.id,
+    );
+    assert.equal((await f.request(check, "POST", {}, founder)).status, 404);
+    assert.equal(f.app.s.get("SELECT COUNT(*) AS count FROM preview_observations WHERE release_id=?",release)?.count,4);
+    assert.equal(hits,6);
   } finally {
     await f.stop();
   }

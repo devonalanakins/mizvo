@@ -1,4 +1,5 @@
 import type { Store, Row } from "../storage/database.ts";
+import type { PreviewObservation } from "../../apps/api/preview.ts";
 import {
   id,
   now,
@@ -249,6 +250,21 @@ export class Domain {
                 checks: JSON.parse(row.checks_json),
                 checks_json: undefined,
               })),
+        preview_observations: this.s
+          .all(
+            "SELECT id,result,http_status,reported_commit,commit_matches,actor_id,observed_at,preview_url,expected_commit FROM preview_observations WHERE project_id=? AND release_id=? ORDER BY observed_at DESC,id DESC LIMIT 5",
+            project,
+            r.id,
+          )
+          .map((p) =>
+            client
+              ? {
+                  result: p.result,
+                  http_status: p.http_status,
+                  observed_at: p.observed_at,
+                }
+              : p,
+          ),
         reviews: this.s.all(
           "SELECT rr.*,u.name AS actor FROM release_reviews rr JOIN users u ON u.id=rr.actor_id WHERE rr.release_id=?",
           r.id,
@@ -311,6 +327,7 @@ export class Domain {
             artifact_url,
             created_at,
             reviews,
+            preview_observations,
           }) => ({
             id,
             label,
@@ -319,6 +336,7 @@ export class Domain {
             artifact_url,
             created_at,
             reviews,
+            preview_observations,
           }),
         ),
       };
@@ -1178,6 +1196,53 @@ export class Domain {
       this.audit(project, user, "release.recorded", release);
     });
     return { id: release };
+  }
+  recordPreviewObservation(
+    user: string,
+    project: string,
+    release: string,
+    observation: PreviewObservation,
+  ) {
+    return this.s.transaction(() => {
+      const grant = owner(this.s, project, user);
+      assert(grant.organization_id === this.organization, 404, "Project not found.");
+      const r = this.s.get(
+        "SELECT commit_sha,demo_url FROM releases WHERE id=? AND project_id=?",
+        release,
+        project,
+      );
+      assert(
+        r &&
+          r.commit_sha === observation.expected_commit &&
+          r.demo_url === observation.preview_url,
+        409,
+        "Preview release or URL changed during observation.",
+      );
+      assert(
+        ["reachable", "http_error", "redirect_denied", "network_error"].includes(
+          observation.result,
+        ),
+        400,
+        "Invalid preview observation.",
+      );
+      const receipt = id();
+      this.s.run(
+        "INSERT INTO preview_observations(id,project_id,release_id,preview_url,expected_commit,result,http_status,reported_commit,commit_matches,actor_id,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        receipt,
+        project,
+        release,
+        observation.preview_url,
+        observation.expected_commit,
+        observation.result,
+        observation.http_status,
+        observation.reported_commit,
+        observation.commit_matches,
+        user,
+        observation.observed_at,
+      );
+      this.audit(project, user, "preview.observed", receipt);
+      return receipt;
+    });
   }
   recordSourceEvidence(
     user: string,

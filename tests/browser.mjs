@@ -13,8 +13,16 @@ const config = {
   origin: "http://localhost",
   organization: "browser-tests",
   githubRepositories: ["devonalanakins/mizvo"],
+  previewUrls: ["https://preview.example.org/check"],
 };
-const app = application(config),
+const app = application(config, {
+    previewFetch: (async (input, options) => {
+      assert.equal(String(input), "https://preview.example.org/check");
+      assert.equal(options.method, "HEAD");
+      assert.equal(options.redirect, "manual");
+      return new Response(null, { status: 200 });
+    }),
+  }),
   password = "Browser-only-test-password-2026";
 const founder = account(
   app.s,
@@ -297,7 +305,7 @@ try {
         : "a".repeat(40),
     rollback: "Return to the prior reviewed artifact.",
     visibility: "client",
-    demo_url: "https://example.test/authorized-demo",
+    demo_url: "https://preview.example.org/check",
   });
   assert.equal(rel.status, 201);
   const clientContext = await browser.newContext(),
@@ -445,8 +453,19 @@ try {
         exact: true,
       })
       .waitFor();
+  await page.once("dialog", async (d) => await d.accept());
+  await page.getByRole("button", { name: "Check preview reachability" }).click();
+  await page.getByText("Responded to a read-only request").waitFor();
   await capture(page, "release-evidence", 1440);
   await capture(page, "release-evidence", 390);
+  await page.getByRole("link", { name: "Proofline", exact: true }).click();
+  await page.getByText("Production deployment not verified").waitFor();
+  await capture(page, "studio-proofline", 1440);
+  await client.goto(config.origin + `/space/projects/${project}?tab=proof`);
+  await client.getByText("Responded to a read-only request").waitFor();
+  await client.getByText("Production deployment not verified").waitFor();
+  assert.equal(await client.getByText("Untrusted response header").count(), 0);
+  await capture(client, "client-proofline", 390);
 
   const revoke = await api(
     page,

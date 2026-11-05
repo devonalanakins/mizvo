@@ -299,6 +299,7 @@ function projectHeader() {
         ["room", "Overview"],
         ["plan", "Progress"],
         ["decisions", "Decisions"],
+        ["proof", "Proofline"],
         ["releases", "Reviews & files"],
         ["feedback", "Feedback"],
         ["support", "Support"],
@@ -307,6 +308,7 @@ function projectHeader() {
         ["room", "Room"],
         ["plan", "Plan"],
         ["decisions", "Client decisions"],
+        ["proof", "Proofline"],
         ["code", "Code"],
         ["design", "Design"],
         ["tests", "Tests"],
@@ -356,14 +358,41 @@ function briefPanel(client = false) {
   ];
   return `<section class="card living-brief" aria-label="Living Brief"><div class="row between"><p class="eyebrow">${e(heading)}</p><span class="version">Revision ${e(b.revision)}</span></div><h2 class="brief-statement">${e(b.outcome)}</h2><div class="brief-grid">${items.map(([title, value]) => `<div class="brief-detail"><h3>${e(title)}</h3><p>${e(value)}</p></div>`).join("")}</div><div class="row between brief-footer"><small>Recorded ${date(b.created_at)}. Only shared revisions appear in Client Space.</small>${owner ? button("Update Living Brief", "new-brief", "") : ""}</div></section>`;
 }
-function proofSummary(client = false) {
-  const evidence =
-    !client &&
-    room!.releases.some((r: Data) =>
-      (r.source_evidence ?? []).some((x: Data) => x.ci_state === "success"),
-    );
-  return `<section class="proof-summary" aria-label="Delivery evidence"><p class="eyebrow">What is verified?</p><div class="proof-steps"><div><strong>Project need</strong><span>${room!.brief ? "Recorded brief" : "No shared brief yet"}</span></div><div><strong>Demo/version</strong><span>${room!.releases.length ? "A version is recorded; preview not verified" : "No version recorded"}</span></div><div><strong>Engineering evidence</strong><span>${evidence ? "GitHub CI observed; inspect in Studio" : client ? "Not independently verified in this view" : "No passing CI observation recorded"}</span></div><div><strong>Live deployment</strong><span>Not verified</span></div></div></section>`;
+function previewReceipt(r: Data, client = false) {
+  const latest = (r.preview_observations ?? [])[0];
+  if (!latest)
+    return `<p class="muted">Preview reachability has not been checked. A recorded URL does not establish a functioning deployment.</p>`;
+  const label = latest.result === "reachable"
+    ? "Responded to a read-only request"
+    : latest.result === "redirect_denied"
+      ? "Redirect refused"
+      : latest.result === "http_error"
+        ? "Endpoint returned an error"
+        : "Connection failed";
+  return `<section class="preview-receipt" aria-label="Preview reachability"><strong>${e(label)}</strong><p class="muted">Checked ${date(latest.observed_at)}${latest.http_status ? ` · HTTP ${e(latest.http_status)}` : ""}. Reachability is not proof of a deployment, identity, or client acceptance.</p>${!client && latest.reported_commit ? `<p class="version">Untrusted response header ${e(latest.reported_commit)} · ${latest.commit_matches ? "matches recorded commit" : "does not match recorded commit"}</p>` : ""}</section>`;
 }
+function proofSummary(client = false) {
+  const previews = room!.releases
+    .flatMap((r: Data) => r.preview_observations ?? [])
+    .sort((a: Data, b: Data) => b.observed_at.localeCompare(a.observed_at));
+  const recent = previews[0];
+  const source = !client && room!.releases.some((r: Data) =>
+    (r.source_evidence ?? []).some((x: Data) => x.ci_state === "success")
+  );
+  const responded = room!.client_decisions.some(
+    (d: Data) => d.status === "answered" && !!d.brief_revision_id
+  );
+  const stages = [
+    ["01 / Need", room!.brief ? `Living Brief revision ${e(room!.brief.revision)} recorded` : "No shared Living Brief"],
+    ["02 / Decision", responded ? "A version-bound client response was recorded" : "No version-bound client response yet"],
+    ["03 / Preview", recent ? `${e(recent.result.replaceAll("_", " "))} · checked ${date(recent.observed_at)}` : "Not observed"],
+    ["04 / Source", client ? "Internal checks are not disclosed here" : source ? "GitHub CI was observed; inspect the exact version" : "No successful CI observation recorded"],
+    ["05 / Operate", "Production deployment not verified"],
+    ["06 / Care", "Backup, restore and handoff not verified"],
+  ];
+  return `<section class="proof-summary" aria-label="Delivery evidence"><p class="eyebrow">Promise to proof</p><h2>What is recorded, and what remains unverified.</h2><p class="muted">A link, a reachable page, an approval and passing CI are different kinds of evidence. No live deployment is implied.</p><div class="proof-steps">${stages.map(([title, state]) => `<div><strong>${e(title)}</strong><span>${state}</span></div>`).join("")}</div></section>`;
+}
+
 function nextClientDecision() {
   const d = room!.next_client_decision,
     release = d?.release_id
@@ -394,7 +423,7 @@ function clientDecisionView() {
   return `<div class="row between" data-layout="layout-2"><div><h2>${client ? "Your decisions" : "Client decision requests"}</h2><p class="muted">Responses belong to a named client and an exact request. They never approve engineering releases or create contracts.</p></div>${canRequest ? button("Request client decision", "new-client-decision", "") : ""}</div>${!client && room!.role === "owner" && !eligible.length ? `<p class="muted">Invite a client and confirm their project access before requesting a decision.</p>` : ""}<div class="stack">${list.length ? cards : empty("No client decisions yet.", client ? "A requested decision will appear here when Mizvo asks for your response." : "A decision request creates a durable record for a specific client.")}</div>`;
 }
 function releases() {
-  return `<div class="row between" data-layout="layout-2"><div><h2>${route.surface === "space" ? "Your project versions" : "Delivery / Version records"}</h2><p class="muted">Each review belongs to one immutable version.</p></div>${room!.role === "owner" ? button(`${icon("plus")} Record version`, "new-release", "") : ""}</div>${room!.releases.length ? room!.releases.map((r: Data) => `<article class="card release" data-layout="layout-5"><div class="row between"><h2>${e(r.label)}</h2><small>${date(r.created_at)}</small></div><p class="prose">${e(r.summary)}</p>${route.surface === "studio" ? `<p class="version">Commit ${e(r.commit_sha)}</p><p class="muted">${r.source_evidence?.length ? "Source checked against GitHub. Artifacts and deployment are not verified." : "Source SHA is recorded but not verified against GitHub."}</p>${room!.role === "owner" ? button("Verify GitHub source", `verify-source:${r.id}`) : ""}${(r.source_evidence ?? []).map((v: Data) => `<section class="review"><strong>GitHub source verified</strong><p class="version">${e(v.repository)}<br>Commit ${e(v.commit_sha)}<br>Tree ${e(v.tree_sha)}</p><p>CI observed: ${e(v.ci_state.replaceAll("_", " "))}</p><small>${date(v.observed_at)} · ${e(room!.members.find((m: Data) => m.user_id === v.actor_id)?.name ?? "Project owner")}</small></section>`).join("")}<h3>Rollback</h3><p class="prose muted">${e(r.rollback)}</p>` : ""}<div class="row">${r.demo_url ? `<a class="button secondary" href="${e(r.demo_url)}" target="_blank" rel="noopener noreferrer">Open demonstration ${icon("arrow")}</a>` : ""}${r.artifact_url ? `<a class="button secondary" href="${e(r.artifact_url)}" target="_blank" rel="noopener noreferrer">Open deliverable ${icon("arrow")}</a>` : ""}${r.actor_id !== me!.user.id && !r.reviews.some((v: Data) => v.actor_id === me!.user.id) ? button("Review this version", `review-release:${r.id}`) : ""}</div>${r.reviews.map((v: Data) => `<div class="review"><div class="row"><strong>${e(v.actor)}</strong>${badge(v.outcome)}<small>${date(v.created_at)}</small></div><p class="prose">${e(v.comment)}</p></div>`).join("")}</article>`).join("") : empty("No version has been shared yet.", "Demonstrations and deliverables appear here when the project owner records a version.")}`;
+  return `<div class="row between" data-layout="layout-2"><div><h2>${route.surface === "space" ? "Your project versions" : "Delivery / Version records"}</h2><p class="muted">Each review belongs to one immutable version.</p></div>${room!.role === "owner" ? button(`${icon("plus")} Record version`, "new-release", "") : ""}</div>${room!.releases.length ? room!.releases.map((r: Data) => `<article class="card release" data-layout="layout-5"><div class="row between"><h2>${e(r.label)}</h2><small>${date(r.created_at)}</small></div><p class="prose">${e(r.summary)}</p>${previewReceipt(r, route.surface === "space")}${route.surface === "studio" ? `<p class="version">Commit ${e(r.commit_sha)}</p><p class="muted">${r.source_evidence?.length ? "Source checked against GitHub. Artifacts and deployment are not verified." : "Source SHA is recorded but not verified against GitHub."}</p>${room!.role === "owner" ? button("Verify GitHub source", `verify-source:${r.id}`) : ""}${room!.role === "owner" && r.demo_url ? (r.preview_probe_allowed ? button("Check preview reachability", `observe-preview:${r.id}`) : `<p class="muted">Preview checks require an administrator-configured exact HTTPS URL.</p>`) : ""}${(r.source_evidence ?? []).map((v: Data) => `<section class="review"><strong>GitHub source verified</strong><p class="version">${e(v.repository)}<br>Commit ${e(v.commit_sha)}<br>Tree ${e(v.tree_sha)}</p><p>CI observed: ${e(v.ci_state.replaceAll("_", " "))}</p><small>${date(v.observed_at)} · ${e(room!.members.find((m: Data) => m.user_id === v.actor_id)?.name ?? "Project owner")}</small></section>`).join("")}<h3>Rollback</h3><p class="prose muted">${e(r.rollback)}</p>` : ""}<div class="row">${r.demo_url ? `<a class="button secondary" href="${e(r.demo_url)}" target="_blank" rel="noopener noreferrer">Open demonstration ${icon("arrow")}</a>` : ""}${r.artifact_url ? `<a class="button secondary" href="${e(r.artifact_url)}" target="_blank" rel="noopener noreferrer">Open deliverable ${icon("arrow")}</a>` : ""}${r.actor_id !== me!.user.id && !r.reviews.some((v: Data) => v.actor_id === me!.user.id) ? button("Review this version", `review-release:${r.id}`) : ""}</div>${r.reviews.map((v: Data) => `<div class="review"><div class="row"><strong>${e(v.actor)}</strong>${badge(v.outcome)}<small>${date(v.created_at)}</small></div><p class="prose">${e(v.comment)}</p></div>`).join("")}</article>`).join("") : empty("No version has been shared yet.", "Demonstrations and deliverables appear here when the project owner records a version.")}`;
 }
 function workbench() {
   return `<div class="row between"><div><h2>Engineering workbench</h2><p class="muted">Read-only source and evidence from GitHub.</p></div>${room!.role === "owner" ? button("Connect repository", "connect-repo") : ""}</div>${room!.repository ? `<section class="card"><p class="version">${e(room!.repository.full_name)}</p><div class="row">${button("Load branches, commits & pull requests", "load-github", "")}${button("Browse source", "browse-source")}${button("Inspect a diff", "diff")}</div><div id="github-evidence" class="stack" data-layout="layout-6"><p class="muted">Evidence is loaded on request. No test outcome is assumed.</p></div></section>` : empty("Connect an authorized repository.", "The installation administrator must allow the repository before the project owner connects it. Source access is limited to internal project members.")}`;
@@ -423,6 +452,7 @@ function projectView() {
   let main = "";
   if (tab === "plan") main = tasks();
   else if (tab === "decisions") main = clientDecisionView();
+  else if (tab === "proof") main = proofSummary(client) + releases();
   else if (tab === "releases") main = releases();
   else if (["code", "tests"].includes(tab) && !client) main = workbench();
   else if (client) {
@@ -441,7 +471,7 @@ function projectView() {
   }
   return (
     projectHeader() +
-    `<div class="room-layout ${client || inspectorCollapsed || ["plan", "decisions", "code", "tests", "releases"].includes(tab) ? "inspector-hidden" : ""}"><section class="room-main">${main}</section>${client || ["plan", "decisions", "code", "tests", "releases"].includes(tab) ? "" : inspectorPanel()}</div>`
+    `<div class="room-layout ${client || inspectorCollapsed || ["plan", "decisions", "proof", "code", "tests", "releases"].includes(tab) ? "inspector-hidden" : ""}"><section class="room-main">${main}</section>${client || ["plan", "decisions", "proof", "code", "tests", "releases"].includes(tab) ? "" : inspectorPanel()}</div>`
   );
 }
 async function overview() {
@@ -1164,6 +1194,25 @@ async function action(value: string) {
       toast(
         `GitHub source receipt saved. CI observed: ${result.ci_state.replaceAll("_", " ")}.`,
       );
+      break;
+    }
+    case "observe-preview": {
+      if (
+        confirm(
+          "Check this exact administrator-allowed HTTPS preview with a read-only HEAD request? This records only reachability and optional untrusted source metadata, never deployment approval.",
+        )
+      ) {
+        const observed = await api(
+          `/projects/${route.project}/releases/${a}/observe-preview`,
+          "POST",
+        );
+        await render();
+        toast(
+          observed.result === "reachable"
+            ? "Preview endpoint responded. Deployment is not verified."
+            : "Preview observation recorded; endpoint was not confirmed reachable.",
+        );
+      }
       break;
     }
     case "new-release":
