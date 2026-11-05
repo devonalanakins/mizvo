@@ -342,7 +342,7 @@ function tasks() {
       : [];
     return `<article class="card"><div class="row between"><h3>${e(m.title)}</h3>${badge(m.status)}</div>${m.summary ? `<p class="prose muted">${e(m.summary)}</p>` : ""}${m.target_date ? `<p class="muted">Target: ${e(m.target_date)}</p>` : ""}${studio ? `<p class="muted">${linked.filter((t: Data) => t.status === "done").length} of ${linked.length} linked tasks complete · ${e(m.visibility)}</p>` : ""}${canEdit ? button("Update milestone", `edit-milestone:${m.id}`) : ""}</article>`;
   });
-  return `<div class="row between" data-layout="layout-2"><div><h2>Plan / Milestones</h2><p class="muted">Concrete checkpoints, linked work, and explicit review.</p></div><div class="row">${canEdit ? button(`${icon("plus")} Add milestone`, "new-milestone", "") : ""}${studio ? button(`${icon("plus")} Add task`, "new-task", "") : ""}</div></div>${milestones.length ? `<div class="grid">${cards.join("")}</div>` : empty("No milestone checkpoints yet.", "The project owner can create a dated checkpoint and choose what to share with clients.")}<div class="divider"></div><h2>Tasks</h2>${list.length ? list.map((t: Data) => `<article class="task"><span>${icon(t.status === "done" ? "check" : "plan")}</span><div class="task-copy"><h3>${e(t.title)}</h3><small>${e(t.milestone)} ${t.depends_on ? "· Has a dependency" : ""}</small><div class="row" data-layout="layout-3">${badge(t.status)}${t.priority === "high" ? badge("high") : ""}</div>${t.evidence ? `<p class="prose muted" data-layout="layout-4">${e(t.evidence)}</p>` : ""}</div>${studio ? button("Update", `edit-task:${t.id}`) : ""}</article>`).join("") : empty("A clear plan starts with one step.", "Tasks and evidence remain available throughout this project.")}`;
+  return `<div class="row between" data-layout="layout-2"><div><h2>Plan / Milestones</h2><p class="muted">Concrete checkpoints, linked work, and explicit review.</p></div><div class="row">${canEdit ? button(`${icon("plus")} Add milestone`, "new-milestone", "") : ""}${studio ? button(`${icon("plus")} Add task`, "new-task", "") : ""}</div></div>${milestones.length ? `<div class="grid">${cards.join("")}</div>` : empty("No milestone checkpoints yet.", "The project owner can create a dated checkpoint and choose what to share with clients.")}<div class="divider"></div><h2>Tasks</h2>${list.length ? list.map((t: Data) => `<article class="task"><span>${icon(t.status === "done" ? "check" : "plan")}</span><div class="task-copy"><h3>${e(t.title)}</h3><small>${e(t.milestone)}${t.assignee_name ? ` · Assigned to ${e(t.assignee_name)}` : ""}${t.due_date ? ` · Due ${e(t.due_date)}` : ""} ${t.depends_on ? "· Has a dependency" : ""}</small><div class="row" data-layout="layout-3">${badge(t.status)}${t.priority === "high" ? badge("high") : ""}</div>${t.evidence ? `<p class="prose muted" data-layout="layout-4">${e(t.evidence)}</p>` : ""}</div>${studio ? button("Update", `edit-task:${t.id}`) : ""}</article>`).join("") : empty("A clear plan starts with one step.", "Tasks and evidence remain available throughout this project.")}`;
 }
 function briefPanel(client = false) {
   const b = room!.brief,
@@ -864,6 +864,12 @@ function milestoneForm(m?: Data) {
 }
 function taskForm(t?: Data) {
   const p = room!;
+  const assignable = (p.members ?? []).filter(
+    (m: Data) =>
+      ["owner", "contributor"].includes(m.role) &&
+      !m.revoked_at &&
+      (!m.expires_at || new Date(m.expires_at) > new Date()),
+  );
   return form(
     t ? `edit-task:${t.id}` : "task",
     field("Task", "title", t?.title ?? "") +
@@ -888,6 +894,9 @@ function taskForm(t?: Data) {
             `<option value="${e(x.id)}" ${t?.depends_on === x.id ? "selected" : ""}>${e(x.title)}</option>`,
         )
         .join("")}</select></label>` +
+      (p.role === "owner"
+        ? `<label class="field">Assignee<select name="assignee_id"><option value="">Unassigned</option>${assignable.map((m: Data) => `<option value="${e(m.user_id)}" ${t?.assignee_id === m.user_id ? "selected" : ""}>${e(m.name)}</option>`).join("")}</select></label><label class="field">Due date<input type="date" name="due_date" value="${e(t?.due_date ?? "")}"></label>`
+        : "") +
       textarea("Completion evidence", "evidence", t?.evidence ?? "", false) +
       select(
         "Visibility",
