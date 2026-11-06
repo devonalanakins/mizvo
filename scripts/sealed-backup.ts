@@ -12,7 +12,6 @@ import {
   chmodSync,
   closeSync,
   constants,
-  existsSync,
   fstatSync,
   fsyncSync,
   linkSync,
@@ -67,6 +66,18 @@ function privateDirectory(path: string, name: string) {
     throw new Error(name + " must be owned by the current user.");
   if (realpathSync(path) !== path)
     throw new Error(name + " must not traverse directory symlinks.");
+}
+
+// lstat sees dangling symlinks that existsSync misses. Never allow a stale
+// SQLite sidecar name to redirect later database writes outside recovery.
+function occupiedPath(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 function readKey(path: string): Buffer {
@@ -138,7 +149,7 @@ function fileSha256(path: string): string {
 
 function validateSnapshot(path: string) {
   const before = regularFile(path, "Snapshot");
-  if (existsSync(path + "-wal") || existsSync(path + "-shm"))
+  if (occupiedPath(path + "-wal") || occupiedPath(path + "-shm"))
     throw new Error(
       "Snapshot has active SQLite sidecars; use the online backup tool.",
     );
@@ -307,7 +318,7 @@ function checkArchive(
     // The temporary plaintext always stays inside the owner-only directory.
     if (publishPath) {
       validateSnapshot(restored);
-      if (existsSync(publishPath + "-wal") || existsSync(publishPath + "-shm"))
+      if (occupiedPath(publishPath + "-wal") || occupiedPath(publishPath + "-shm"))
         throw new Error("Restored database destination has SQLite sidecars.");
       const restoredSha256 = fileSha256(restored);
       const fd = openSync(restored, constants.O_RDONLY);
@@ -387,7 +398,7 @@ if (
       if (!thirdPath.endsWith(".sqlite"))
         throw new Error("Offline restore requires a new .sqlite destination.");
       privateDirectory(dirname(thirdPath), "Offline restore directory");
-      if (existsSync(thirdPath + "-wal") || existsSync(thirdPath + "-shm"))
+      if (occupiedPath(thirdPath + "-wal") || occupiedPath(thirdPath + "-shm"))
         throw new Error("Restored database destination has SQLite sidecars.");
       const result = checkArchive(source, key, dirname(thirdPath), thirdPath);
       if (!result.offline_database_published || !result.restored_sha256)
