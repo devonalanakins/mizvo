@@ -567,7 +567,9 @@ try {
     assert.equal(visible.overflow, true);
     assert.equal(visible.horizontallySafe, true);
     assert.equal(
-      await client.getByText("Swipe or scroll sideways for more sections").isVisible(),
+      await client
+        .getByText("Swipe or scroll sideways for more sections")
+        .isVisible(),
       true,
     );
   }
@@ -575,7 +577,9 @@ try {
   await client.setViewportSize({ width: 1440, height: 1000 });
   await visit(client, config.origin + `/space/projects/${project}?tab=room`);
   assert.equal(
-    await client.getByText("Swipe or scroll sideways for more sections").isVisible(),
+    await client
+      .getByText("Swipe or scroll sideways for more sections")
+      .isVisible(),
     false,
   );
   await client.setViewportSize({ width: 390, height: 1000 });
