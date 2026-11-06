@@ -540,6 +540,45 @@ try {
 
   for (const w of [320, 390, 768, 1024, 1440, 1920])
     await capture(client, "client-space", w);
+  // On narrow phones, later sections are otherwise off-screen. Their
+  // scroll affordance and the active section must remain discoverable.
+  await client.setViewportSize({ width: 320, height: 1000 });
+  for (const tab of ["support", "ownership", "releases"]) {
+    await visit(
+      client,
+      config.origin + `/space/projects/${project}?tab=${tab}`,
+    );
+    const sections = client.getByRole("navigation", {
+      name: "Project sections",
+    });
+    const active = sections.locator('[aria-current="page"]');
+    const visible = await active.evaluate((item) => {
+      const bounds = item.getBoundingClientRect();
+      const nav = item.closest("nav").getBoundingClientRect();
+      return {
+        title: item.textContent.trim(),
+        within: bounds.left >= nav.left - 1 && bounds.right <= nav.right + 1,
+        overflow: item.closest("nav").scrollWidth > nav.width,
+        horizontallySafe:
+          document.documentElement.scrollWidth <= window.innerWidth + 1,
+      };
+    });
+    assert.equal(visible.within, true, `Selected ${tab} tab must be visible.`);
+    assert.equal(visible.overflow, true);
+    assert.equal(visible.horizontallySafe, true);
+    assert.equal(
+      await client.getByText("Swipe or scroll sideways for more sections").isVisible(),
+      true,
+    );
+  }
+  await capture(client, "client-mobile-tabs-deeplink", 320);
+  await client.setViewportSize({ width: 1440, height: 1000 });
+  await visit(client, config.origin + `/space/projects/${project}?tab=room`);
+  assert.equal(
+    await client.getByText("Swipe or scroll sideways for more sections").isVisible(),
+    false,
+  );
+  await client.setViewportSize({ width: 390, height: 1000 });
   await client.getByRole("link", { name: "Feedback", exact: true }).click();
   await client.locator("#record-title").fill("Client feedback");
   await client
