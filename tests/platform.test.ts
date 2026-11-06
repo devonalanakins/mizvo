@@ -2483,7 +2483,10 @@ test("V0.20 Client Space home includes only current decisions addressed to that 
       await f.request(
         "/projects",
         "POST",
-        { name: "Next action privacy", purpose: "Keep client decisions scoped." },
+        {
+          name: "Next action privacy",
+          purpose: "Keep client decisions scoped.",
+        },
         founder,
       )
     ).value.id;
@@ -2555,9 +2558,8 @@ test("V0.20 Client Space home includes only current decisions addressed to that 
       founder,
     );
     assert.equal(other.status, 201);
-    const clientHome = (
-      await f.request("/space/home", "GET", undefined, first)
-    ).value;
+    const clientHome = (await f.request("/space/home", "GET", undefined, first))
+      .value;
     assert.equal(clientHome.client_decisions.length, 1);
     assert.equal(clientHome.client_decisions[0].id, addressed.value.id);
     assert.equal(
@@ -2566,19 +2568,21 @@ test("V0.20 Client Space home includes only current decisions addressed to that 
     );
     assert.equal(clientHome.client_decisions[0].project_id, project);
     assert.equal(clientHome.decisions.length, 0);
-    assert(!JSON.stringify(clientHome).includes("SECOND_CLIENT_PRIVATE_ACTION"));
-    assert(!JSON.stringify(clientHome).includes("Is the fictional interface clear?"));
-    const otherHome = (
-      await f.request("/space/home", "GET", undefined, second)
-    ).value;
+    assert(
+      !JSON.stringify(clientHome).includes("SECOND_CLIENT_PRIVATE_ACTION"),
+    );
+    assert(
+      !JSON.stringify(clientHome).includes("Is the fictional interface clear?"),
+    );
+    const otherHome = (await f.request("/space/home", "GET", undefined, second))
+      .value;
     assert.deepEqual(
       otherHome.client_decisions.map((d: any) => d.id),
       [other.value.id],
     );
     assert(!JSON.stringify(otherHome).includes("FIRST_CLIENT_PRIVATE_ACTION"));
-    const engineerHome = (
-      await f.request("/home", "GET", undefined, engineer)
-    ).value;
+    const engineerHome = (await f.request("/home", "GET", undefined, engineer))
+      .value;
     assert.deepEqual(engineerHome.client_decisions, []);
     assert(
       !JSON.stringify(engineerHome).includes("FIRST_CLIENT_PRIVATE_ACTION"),
@@ -2586,7 +2590,12 @@ test("V0.20 Client Space home includes only current decisions addressed to that 
     const revised = await f.request(
       path + "/brief-revisions",
       "POST",
-      { ...brief, outcome: "Revised outcome", visibility: "client", base_revision: 1 },
+      {
+        ...brief,
+        outcome: "Revised outcome",
+        visibility: "client",
+        base_revision: 1,
+      },
       founder,
     );
     assert.equal(revised.status, 201);
