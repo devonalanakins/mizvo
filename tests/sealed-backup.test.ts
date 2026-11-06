@@ -45,7 +45,11 @@ function fixture() {
   writeFileSync(key, randomBytes(32), { flag: "wx", mode: 0o600 });
   writeFileSync(wrongKey, randomBytes(32), { flag: "wx", mode: 0o600 });
   const store = new Store(source);
-  store.run("INSERT INTO organizations VALUES (?,?)", "fictional-org", "Fictional Organization");
+  store.run(
+    "INSERT INTO organizations VALUES (?,?)",
+    "fictional-org",
+    "Fictional Organization",
+  );
   const user = account(
     store,
     "Fictional Backup User",
@@ -86,9 +90,14 @@ test("V0.19 sealed backup authenticates a snapshot and verifies an isolated sess
   const f = fixture();
   try {
     const before = hash(f.snapshot);
-    const originalSessions = f.store.get("SELECT COUNT(*) AS count FROM sessions")!.count;
+    const originalSessions = f.store.get(
+      "SELECT COUNT(*) AS count FROM sessions",
+    )!.count;
     const sealed = run("scripts/sealed-backup.ts", [
-      "seal", f.snapshot, f.archive, f.key,
+      "seal",
+      f.snapshot,
+      f.archive,
+      f.key,
     ]);
     assert.equal(sealed.status, 0, sealed.stderr);
     const sealReceipt = JSON.parse(sealed.stdout);
@@ -99,9 +108,15 @@ test("V0.19 sealed backup authenticates a snapshot and verifies an isolated sess
     assert.equal(sealReceipt.independently_off_host_verified, false);
     assert.equal(sealReceipt.disaster_recovery_approved, false);
     assert.equal(lstatSync(f.archive).mode & 0o077, 0);
-    assert.equal(readFileSync(f.archive).includes(Buffer.from("SQLite format 3")), false);
+    assert.equal(
+      readFileSync(f.archive).includes(Buffer.from("SQLite format 3")),
+      false,
+    );
     const checked = run("scripts/sealed-backup.ts", [
-      "verify", f.archive, f.key, f.recoveryDir,
+      "verify",
+      f.archive,
+      f.key,
+      f.recoveryDir,
     ]);
     assert.equal(checked.status, 0, checked.stderr);
     assert.match(checked.stdout, /authenticated/);
@@ -120,7 +135,10 @@ test("V0.19 sealed backup authenticates a snapshot and verifies an isolated sess
     assert.equal(lstatSync(receiptPath).mode & 0o077, 0);
     assert.deepEqual(readdirSync(f.recoveryDir), receiptFiles);
     assert.equal(hash(f.snapshot), before);
-    assert.equal(f.store.get("SELECT COUNT(*) AS count FROM sessions")!.count, originalSessions);
+    assert.equal(
+      f.store.get("SELECT COUNT(*) AS count FROM sessions")!.count,
+      originalSessions,
+    );
     assert.equal(readdirSync(f.archiveDir).length, 1);
   } finally {
     f.dispose();
@@ -131,12 +149,16 @@ test("V0.19 wrong keys, ciphertext tampering and truncation never produce a pass
   const f = fixture();
   try {
     assert.equal(
-      run("scripts/sealed-backup.ts", ["seal", f.snapshot, f.archive, f.key]).status,
+      run("scripts/sealed-backup.ts", ["seal", f.snapshot, f.archive, f.key])
+        .status,
       0,
     );
     const original = readFileSync(f.archive);
     const wrong = run("scripts/sealed-backup.ts", [
-      "verify", f.archive, f.wrongKey, f.recoveryDir,
+      "verify",
+      f.archive,
+      f.wrongKey,
+      f.recoveryDir,
     ]);
     assert.notEqual(wrong.status, 0);
     assert.equal(readdirSync(f.recoveryDir).length, 0);
@@ -146,7 +168,10 @@ test("V0.19 wrong keys, ciphertext tampering and truncation never produce a pass
     tampered[Math.floor(tampered.length / 2)]! ^= 1;
     writeFileSync(tamperedPath, tampered, { mode: 0o600 });
     const rejected = run("scripts/sealed-backup.ts", [
-      "verify", tamperedPath, f.key, f.recoveryDir,
+      "verify",
+      tamperedPath,
+      f.key,
+      f.recoveryDir,
     ]);
     assert.notEqual(rejected.status, 0);
     assert.equal(readdirSync(f.recoveryDir).length, 0);
@@ -156,13 +181,18 @@ test("V0.19 wrong keys, ciphertext tampering and truncation never produce a pass
     });
     assert.notEqual(
       run("scripts/sealed-backup.ts", [
-        "verify", truncatedPath, f.key, f.recoveryDir,
+        "verify",
+        truncatedPath,
+        f.key,
+        f.recoveryDir,
       ]).status,
       0,
     );
     assert.equal(readdirSync(f.recoveryDir).length, 0);
     assert.deepEqual(readdirSync(f.archiveDir).sort(), [
-      "snapshot.mzseal", "tampered.mzseal", "truncated.mzseal",
+      "snapshot.mzseal",
+      "tampered.mzseal",
+      "truncated.mzseal",
     ]);
   } finally {
     f.dispose();
@@ -173,12 +203,18 @@ test("V0.19 sealing refuses overwrites, symlinks, weak key permissions and expos
   const f = fixture();
   try {
     const first = run("scripts/sealed-backup.ts", [
-      "seal", f.snapshot, f.archive, f.key,
+      "seal",
+      f.snapshot,
+      f.archive,
+      f.key,
     ]);
     assert.equal(first.status, 0, first.stderr);
     const archiveHash = hash(f.archive);
     const second = run("scripts/sealed-backup.ts", [
-      "seal", f.snapshot, f.archive, f.key,
+      "seal",
+      f.snapshot,
+      f.archive,
+      f.key,
     ]);
     assert.notEqual(second.status, 0);
     assert.equal(hash(f.archive), archiveHash);
@@ -189,7 +225,10 @@ test("V0.19 sealing refuses overwrites, symlinks, weak key permissions and expos
     symlinkSync(missing, symlinkArchive);
     assert.notEqual(
       run("scripts/sealed-backup.ts", [
-        "seal", f.snapshot, symlinkArchive, f.key,
+        "seal",
+        f.snapshot,
+        symlinkArchive,
+        f.key,
       ]).status,
       0,
     );
@@ -199,7 +238,10 @@ test("V0.19 sealing refuses overwrites, symlinks, weak key permissions and expos
     chmodSync(f.key, 0o644);
     assert.notEqual(
       run("scripts/sealed-backup.ts", [
-        "verify", f.archive, f.key, f.recoveryDir,
+        "verify",
+        f.archive,
+        f.key,
+        f.recoveryDir,
       ]).status,
       0,
     );
@@ -209,14 +251,20 @@ test("V0.19 sealing refuses overwrites, symlinks, weak key permissions and expos
     symlinkSync(f.key, keySymlink);
     assert.notEqual(
       run("scripts/sealed-backup.ts", [
-        "verify", f.archive, keySymlink, f.recoveryDir,
+        "verify",
+        f.archive,
+        keySymlink,
+        f.recoveryDir,
       ]).status,
       0,
     );
     chmodSync(f.backupDir, 0o755);
     assert.notEqual(
       run("scripts/sealed-backup.ts", [
-        "seal", f.snapshot, join(f.archiveDir, "exposed.mzseal"), f.key,
+        "seal",
+        f.snapshot,
+        join(f.archiveDir, "exposed.mzseal"),
+        f.key,
       ]).status,
       0,
     );
