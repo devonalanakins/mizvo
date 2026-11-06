@@ -16,7 +16,7 @@
     "test:browser": "node tests/browser.mjs",
     "check": "npm run typecheck && npm test && npm run build",
     "account": "node --experimental-strip-types scripts/account.ts",
-    "lint": "prettier --write tests/sealed-backup.test.ts && git diff -- tests/sealed-backup.test.ts && exit 1",
+    "lint": "prettier --check apps packages scripts tests package.json tsconfig.json .github",
     "format": "prettier --write apps packages scripts tests package.json tsconfig.json .github",
     "backup": "node scripts/backup.ts",
     "backup:sealed": "node scripts/sealed-backup.ts",
