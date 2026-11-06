@@ -63,20 +63,26 @@ function observe(page) {
   });
 }
 observe(page);
-async function visit(p, url) {
-  // A hard document replacement can cancel the preceding screen's real reads.
-  // WebKit reports some such cancellations as page errors. Exercise completed
-  // task boundaries in every engine; never filter errors to make a test pass.
-  await p.waitForLoadState("networkidle");
-  await p.goto(url);
+async function settledApplication(p) {
+  // A fully rendered workspace must settle before a hard page replacement.
+  // Otherwise WebKit can reject the departing /api/home read as an unhandled
+  // page error. Never suppress or exclude browser errors from the final gate.
+  if (p.url().startsWith("http")) {
+    await p.waitForFunction(
+      () => document.querySelector("#app")?.getAttribute("aria-busy") !== "true",
+    );
+  }
   await p.waitForLoadState("networkidle");
 }
+async function visit(p, url) {
+  await settledApplication(p);
+  await p.goto(url);
+  await settledApplication(p);
+}
 async function settledReload(p) {
-  // The same rule applies to explicit reloads, not only cross-route visits.
-  // Keep the final zero-page-error assertion intact in both engines.
-  await p.waitForLoadState("networkidle");
+  await settledApplication(p);
   await p.reload();
-  await p.waitForLoadState("networkidle");
+  await settledApplication(p);
 }
 async function signIn(p, email, path = "/studio") {
   await visit(p, config.origin + path);
@@ -543,14 +549,25 @@ try {
   // On narrow phones, later sections are otherwise off-screen. Their
   // scroll affordance and the active section must remain discoverable.
   await client.setViewportSize({ width: 320, height: 1000 });
-  for (const tab of ["support", "ownership", "releases"]) {
-    await visit(
-      client,
-      config.origin + `/space/projects/${project}?tab=${tab}`,
-    );
+  await visit(client, config.origin + `/space/projects/${project}?tab=support`);
+  for (const [tab, label] of [
+    ["support", "Support"],
+    ["ownership", "Ownership"],
+    ["releases", "Reviews & files"],
+  ]) {
     const sections = client.getByRole("navigation", {
       name: "Project sections",
     });
+    if (tab !== "support") {
+      await sections.getByRole("link", { name: label, exact: true }).click();
+    }
+    await client.waitForFunction(
+      (current) =>
+        document
+          .querySelector('.tabs a[aria-current="page"]')
+          ?.textContent?.trim() === current,
+      label,
+    );
     const active = sections.locator('[aria-current="page"]');
     const visible = await active.evaluate((item) => {
       const bounds = item.getBoundingClientRect();
@@ -563,6 +580,7 @@ try {
           document.documentElement.scrollWidth <= window.innerWidth + 1,
       };
     });
+    assert.equal(visible.title, label);
     assert.equal(visible.within, true, `Selected ${tab} tab must be visible.`);
     assert.equal(visible.overflow, true);
     assert.equal(visible.horizontallySafe, true);
@@ -575,7 +593,16 @@ try {
   }
   await capture(client, "client-mobile-tabs-deeplink", 320);
   await client.setViewportSize({ width: 1440, height: 1000 });
-  await visit(client, config.origin + `/space/projects/${project}?tab=room`);
+  await client
+    .getByRole("navigation", { name: "Project sections" })
+    .getByRole("link", { name: "Overview", exact: true })
+    .click();
+  await client.waitForFunction(
+    () =>
+      document
+        .querySelector('.tabs a[aria-current="page"]')
+        ?.textContent?.trim() === "Overview",
+  );
   assert.equal(
     await client
       .getByText("Swipe or scroll sideways for more sections")
