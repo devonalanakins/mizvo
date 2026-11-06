@@ -56,7 +56,9 @@ function privateDirectory(path: string, name: string) {
   if (!entry.isDirectory() || entry.isSymbolicLink())
     throw new Error(name + " must be an existing real directory.");
   if (process.platform === "win32")
-    throw new Error("The encrypted archive CLI requires POSIX file permissions.");
+    throw new Error(
+      "The encrypted archive CLI requires POSIX file permissions.",
+    );
   if ((entry.mode & 0o077) !== 0)
     throw new Error(name + " must be owner-only (mode 0700).");
   if (process.getuid && entry.uid !== process.getuid())
@@ -76,10 +78,14 @@ function readKey(path: string): Buffer {
   const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.dev !== entry.dev ||
-        opened.ino !== entry.ino || opened.size !== 32 ||
-        (opened.mode & 0o077) !== 0 ||
-        (process.getuid && opened.uid !== process.getuid()))
+    if (
+      !opened.isFile() ||
+      opened.dev !== entry.dev ||
+      opened.ino !== entry.ino ||
+      opened.size !== 32 ||
+      (opened.mode & 0o077) !== 0 ||
+      (process.getuid && opened.uid !== process.getuid())
+    )
       throw new Error("Key changed or became accessible during opening.");
     const key = Buffer.alloc(32);
     if (readSync(fd, key, 0, key.length, 0) !== key.length)
@@ -131,23 +137,33 @@ function fileSha256(path: string): string {
 function validateSnapshot(path: string) {
   const before = regularFile(path, "Snapshot");
   if (existsSync(path + "-wal") || existsSync(path + "-shm"))
-    throw new Error("Snapshot has active SQLite sidecars; use the online backup tool.");
+    throw new Error(
+      "Snapshot has active SQLite sidecars; use the online backup tool.",
+    );
   if ((before.mode & 0o077) !== 0)
     throw new Error("Snapshot must be owner-only (mode 0600).");
   const database = new DatabaseSync(path, { readOnly: true });
   try {
-    if (database.prepare("PRAGMA integrity_check").get()?.integrity_check !== "ok")
+    if (
+      database.prepare("PRAGMA integrity_check").get()?.integrity_check !== "ok"
+    )
       throw new Error("SQLite integrity check failed.");
     if (database.prepare("PRAGMA foreign_key_check").all().length)
       throw new Error("SQLite foreign key check failed.");
-    if (database.prepare("PRAGMA journal_mode").get()?.journal_mode !== "delete")
+    if (
+      database.prepare("PRAGMA journal_mode").get()?.journal_mode !== "delete"
+    )
       throw new Error("Backup must have a detached DELETE journal mode.");
-    const folder = fileURLToPath(new URL("../packages/storage/", import.meta.url));
+    const folder = fileURLToPath(
+      new URL("../packages/storage/", import.meta.url),
+    );
     const names = readdirSync(folder)
       .filter((name) => /^\d{3}-.+\.sql$/.test(name))
       .sort();
     const migrations = database
-      .prepare("SELECT version,checksum FROM migration_checksums ORDER BY version")
+      .prepare(
+        "SELECT version,checksum FROM migration_checksums ORDER BY version",
+      )
       .all() as Array<{ version: number; checksum: string }>;
     const applied = database
       .prepare("SELECT version FROM migrations ORDER BY version")
@@ -165,7 +181,9 @@ function validateSnapshot(path: string) {
         applied[i]?.version !== version ||
         migrations[i]?.checksum !== checksum
       )
-        throw new Error("Snapshot migration checksum does not match this release.");
+        throw new Error(
+          "Snapshot migration checksum does not match this release.",
+        );
     }
     return { migrations: names.length };
   } finally {
@@ -208,10 +226,15 @@ function decrypt(archive: string, target: string, key: Buffer) {
   const tag = Buffer.alloc(TAG_SIZE);
   const chunk = Buffer.allocUnsafe(CHUNK_SIZE);
   try {
-    if (readSync(encrypted.fd, header, 0, header.length, 0) !== header.length ||
-        !header.subarray(0, MAGIC.length).equals(MAGIC))
+    if (
+      readSync(encrypted.fd, header, 0, header.length, 0) !== header.length ||
+      !header.subarray(0, MAGIC.length).equals(MAGIC)
+    )
       throw new Error("Unrecognized sealed archive format.");
-    if (readSync(encrypted.fd, tag, 0, tag.length, encrypted.size - TAG_SIZE) !== TAG_SIZE)
+    if (
+      readSync(encrypted.fd, tag, 0, tag.length, encrypted.size - TAG_SIZE) !==
+      TAG_SIZE
+    )
       throw new Error("Incomplete archive authentication tag.");
     const nonce = header.subarray(MAGIC.length);
     const decipher = createDecipheriv("aes-256-gcm", key, nonce);
@@ -255,7 +278,10 @@ function checkArchive(archive: string, key: Buffer, directory: string) {
         database.exec("ROLLBACK");
         throw e;
       }
-      if ((database.prepare("SELECT COUNT(*) AS count FROM sessions").get()?.count ?? -1) !== 0)
+      if (
+        (database.prepare("SELECT COUNT(*) AS count FROM sessions").get()
+          ?.count ?? -1) !== 0
+      )
         throw new Error("Recovery session invalidation failed.");
     } finally {
       database.close();
@@ -282,8 +308,7 @@ function seal(snapshot: string, archive: string, key: Buffer) {
   try {
     encrypt(snapshot, candidate, key);
     const check = checkArchive(candidate, key, work);
-    if (before !== check.snapshot_sha256 ||
-        fileSha256(snapshot) !== before)
+    if (before !== check.snapshot_sha256 || fileSha256(snapshot) !== before)
       throw new Error("Snapshot changed while being sealed.");
     linkSync(candidate, archive); // atomic, exclusive, refuses dangling symlinks
     return { archive_sha256: fileSha256(archive), ...check };
@@ -296,8 +321,13 @@ const [command, input, second, third, ...extra] = process.argv.slice(2);
 const usage =
   "Usage: seal <absolute-snapshot.sqlite> <absolute-new-archive.mzseal> <absolute-32-byte-key> | verify <absolute-archive.mzseal> <absolute-key> <absolute-private-recovery-directory>";
 
-if (!["seal", "verify"].includes(command ?? "") ||
-    !input || !second || !third || extra.length) {
+if (
+  !["seal", "verify"].includes(command ?? "") ||
+  !input ||
+  !second ||
+  !third ||
+  extra.length
+) {
   console.error(usage);
   process.exitCode = 2;
 } else {
@@ -313,20 +343,25 @@ if (!["seal", "verify"].includes(command ?? "") ||
     key = readKey(keyPath);
     if (command === "seal") {
       const result = seal(source, destination, key);
-      console.log(JSON.stringify({
-        schema: "mizvo.sealed-backup.v1",
-        archive_sha256: result.archive_sha256,
-        snapshot_sha256: result.snapshot_sha256,
-        migration_count: result.migration_count,
-        authentication: "aes-256-gcm",
-        encrypted_archive_published_exclusively: true,
-        independently_off_host_verified: false,
-        key_escrow_verified: false,
-        disaster_recovery_approved: false,
-      }));
+      console.log(
+        JSON.stringify({
+          schema: "mizvo.sealed-backup.v1",
+          archive_sha256: result.archive_sha256,
+          snapshot_sha256: result.snapshot_sha256,
+          migration_count: result.migration_count,
+          authentication: "aes-256-gcm",
+          encrypted_archive_published_exclusively: true,
+          independently_off_host_verified: false,
+          key_escrow_verified: false,
+          disaster_recovery_approved: false,
+        }),
+      );
     } else {
       const result = checkArchive(source, key, thirdPath);
-      const privatePath = join(thirdPath, "mizvo-sealed-verify-" + randomUUID() + ".json");
+      const privatePath = join(
+        thirdPath,
+        "mizvo-sealed-verify-" + randomUUID() + ".json",
+      );
       const receipt = {
         schema: "mizvo.sealed-backup-check.v1",
         observed_at: new Date().toISOString(),
@@ -345,7 +380,9 @@ if (!["seal", "verify"].includes(command ?? "") ||
       } finally {
         closeSync(fd);
       }
-      console.log("PASS: encrypted archive authenticated, private SQLite recovery checked and temporary plaintext deleted.");
+      console.log(
+        "PASS: encrypted archive authenticated, private SQLite recovery checked and temporary plaintext deleted.",
+      );
     }
   } catch (error) {
     console.error("Sealed-backup operation failed:", (error as Error).message);
