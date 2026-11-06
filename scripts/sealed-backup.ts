@@ -24,7 +24,6 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
-  writeFileSync,
   writeSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
