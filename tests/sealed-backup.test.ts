@@ -303,7 +303,10 @@ test("V0.19 sealing refuses overwrites, symlinks, weak key permissions and expos
     ]);
     assert.notEqual(unsafe.status, 0);
     assert(lstatSync(danglingWal).isSymbolicLink());
-    assert.equal(existsSync(join(f.archiveDir, "sidecar-unsafe.mzseal")), false);
+    assert.equal(
+      existsSync(join(f.archiveDir, "sidecar-unsafe.mzseal")),
+      false,
+    );
   } finally {
     f.dispose();
   }
