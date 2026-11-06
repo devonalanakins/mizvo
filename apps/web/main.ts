@@ -624,7 +624,7 @@ function nextHomeAction(focus: Data) {
   const task = !client ? focus.tasks[0] : null;
   const decision = !client ? focus.decisions[0] : null;
   const item = requested ?? task ?? decision;
-  const target = item?.project_id ?? projects[0].id;
+  const target = item?.project_id ?? projects[0]!.id;
   const destination = requested
     ? projectPath(target)
     : task
