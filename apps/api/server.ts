@@ -192,9 +192,17 @@ export function application(
             config.organization,
           );
           const migrations = s.get(
-            "SELECT 1 AS present FROM migration_checksums WHERE version=(SELECT MAX(version) FROM migrations)",
+            "SELECT COUNT(*) AS applied, SUM(CASE WHEN c.version IS NULL THEN 1 ELSE 0 END) AS unmatched FROM migrations m LEFT JOIN migration_checksums c ON c.version=m.version",
           );
-          ready = organization?.present === 1 && migrations?.present === 1;
+          // Prepare representative account, session and record reads. An empty
+          // installation is valid; a missing essential table is not.
+          s.get("SELECT id FROM users LIMIT 1");
+          s.get("SELECT hash FROM sessions LIMIT 1");
+          s.get("SELECT id FROM records LIMIT 1");
+          ready =
+            organization?.present === 1 &&
+            migrations.applied > 0 &&
+            migrations.unmatched === 0;
         } catch {
           // Never expose database errors or schema details to public probes.
         }
