@@ -201,8 +201,8 @@ export function application(
           s.get("SELECT id FROM records LIMIT 1");
           ready =
             organization?.present === 1 &&
-            migrations.applied > 0 &&
-            migrations.unmatched === 0;
+            Number(migrations?.applied ?? 0) > 0 &&
+            migrations?.unmatched === 0;
         } catch {
           // Never expose database errors or schema details to public probes.
         }
