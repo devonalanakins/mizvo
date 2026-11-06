@@ -4,8 +4,10 @@ import {
   type ServerResponse,
 } from "node:http";
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve, extname } from "node:path";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { Store, type Row } from "../../packages/storage/database.ts";
 import {
   Domain,
@@ -33,6 +35,13 @@ import {
   rate,
   version,
 } from "../../packages/authz/security.ts";
+// Hash the exact server entrypoint bytes once at startup. In the compiled
+// distribution this is dist/apps/api/server.js; this is a fingerprint, not
+// proof of the rest of the installation or a signature.
+const serverFileSha256 = createHash("sha256")
+  .update(readFileSync(fileURLToPath(import.meta.url)))
+  .digest("hex");
+
 export interface Config {
   database: string;
   origin: string;
@@ -178,6 +187,7 @@ export function application(
           version: "0.20.0",
           storage: "sqlite",
           release: "local-review",
+          server_sha256: serverFileSha256,
         });
         return;
       }
@@ -1036,6 +1046,14 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
+  // An operator may pin the server binary against a digest obtained through
+  // an independent review channel. A mismatch must abort before DB startup.
+  const expected = process.env.MIZVO_EXPECTED_SERVER_SHA256;
+  if (
+    expected !== undefined &&
+    (!/^[a-f0-9]{64}$/.test(expected) || expected !== serverFileSha256)
+  )
+    throw new Error("Runtime server fingerprint differs from approved digest.");
   const port = Number(process.env.PORT ?? 4173);
   const app = application({
     database: process.env.MIZVO_DATABASE ?? "var/mizvo.sqlite",
