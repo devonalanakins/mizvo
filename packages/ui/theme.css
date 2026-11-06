@@ -690,6 +690,21 @@ pre {
   margin-top: 24px;
   padding-bottom: 0;
   scrollbar-width: thin;
+  scrollbar-color: #a57e61 transparent;
+}
+.tabs:focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: -2px;
+}
+.tabs::-webkit-scrollbar {
+  height: 5px;
+}
+.tabs::-webkit-scrollbar-thumb {
+  background: #a57e61;
+  border-radius: 5px;
+}
+.tabs-hint {
+  display: none;
 }
 .tabs a {
   padding: 12px 3px 14px;
@@ -1135,6 +1150,15 @@ pre {
   }
   .tabs {
     gap: 20px;
+  }
+  .tabs-hint {
+    display: block;
+    margin: 0;
+    padding: 6px 0 10px;
+    font-size: 11px;
+    color: #ddd7d2;
+    text-align: right;
+    letter-spacing: 0.02em;
   }
   .public-header {
     height: 80px;
