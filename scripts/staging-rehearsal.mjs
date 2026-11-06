@@ -120,7 +120,7 @@ async function stop(child) {
 }
 
 async function waitForHealth(child, origin, port) {
-  const endpoint = "http://127.0.0.1:" + port + "/api/health";
+  const endpoint = "http://127.0.0.1:" + port + "/api/ready";
   const started = Date.now();
   while (Date.now() - started < durationLimitMs) {
     assert(
