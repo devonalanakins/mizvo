@@ -59,7 +59,7 @@ async function waitForUpstream(port, child) {
       "Staging app quit before readiness",
     );
     try {
-      const r = await fetch("http://127.0.0.1:" + port + "/api/health", {
+      const r = await fetch("http://127.0.0.1:" + port + "/api/ready", {
         signal: AbortSignal.timeout(800),
       });
       if (r.status === 200 && (await r.json()).status === "ok") return;
