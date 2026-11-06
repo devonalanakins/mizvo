@@ -695,7 +695,10 @@ test("client feedback and support stay private between clients on the same proje
         session,
       );
       assert.equal(sharedLookup.status, 200);
-      assert.deepEqual(Object.keys(sharedLookup.value).sort(), clientRecordKeys);
+      assert.deepEqual(
+        Object.keys(sharedLookup.value).sort(),
+        clientRecordKeys,
+      );
       assert.equal(sharedLookup.value.can_edit, false);
     }
     const internalHistory = await f.request(
