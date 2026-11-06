@@ -445,7 +445,9 @@ async function main() {
     };
     child = stageProcess(second, secondEnv);
     await waitForHealth(child, secondEnv.MIZVO_ORIGIN, port);
-    const secondHealth = await fetch("http://127.0.0.1:" + port + "/api/health");
+    const secondHealth = await fetch(
+      "http://127.0.0.1:" + port + "/api/health",
+    );
     assert.equal(secondHealth.status, 200);
     assert.equal((await secondHealth.json()).server_sha256, artifactSha);
     const secondApi = apiFactory(port);
