@@ -317,7 +317,7 @@ function projectHeader() {
         ["ownership", "Handoff"],
         ["notes", "Notes"],
       ];
-  return `<header class="project-head"><div class="breadcrumb"><a href="/${route.surface}/projects">Projects</a> / ${e(p.name)}</div><div class="project-title"><img class="project-thumb" src="/assets/architecture.svg" alt=""><div><h1>${e(p.name)}</h1><p>${e(p.purpose)}</p></div>${badge(p.status)}</div><nav class="tabs" aria-label="Project sections">${tabs.map(([key, label]) => `<a href="${projectPath(p.id, key)}" class="${route.tab === key ? "active" : ""}" ${route.tab === key ? 'aria-current="page"' : ""}>${label}</a>`).join("")}</nav></header>`;
+  return `<header class="project-head"><div class="breadcrumb"><a href="/${route.surface}/projects">Projects</a> / ${e(p.name)}</div><div class="project-title"><img class="project-thumb" src="/assets/architecture.svg" alt=""><div><h1>${e(p.name)}</h1><p>${e(p.purpose)}</p></div>${badge(p.status)}</div><nav class="tabs" aria-label="Project sections" aria-describedby="project-tabs-hint" tabindex="0">${tabs.map(([key, label]) => `<a href="${projectPath(p.id, key)}" class="${route.tab === key ? "active" : ""}" ${route.tab === key ? 'aria-current="page"' : ""}>${label}</a>`).join("")}</nav><p id="project-tabs-hint" class="tabs-hint">Swipe or scroll sideways for more sections <span aria-hidden="true">→</span></p></header>`;
 }
 function inspectorPanel() {
   const p = room!.project;
@@ -736,6 +736,21 @@ async function overview() {
     `<div class="page-body">${route.page === "people" && route.project ? "" : projectCards().replaceAll("?tab=room", `?tab=${route.page === "workbench" ? "code" : route.page === "delivery" ? "releases" : "room"}`)}${route.page === "people" && projects.length ? `<div class="divider"></div>${projects.map((p) => button(`Manage ${e(p.name)}`, `people:${p.id}`)).join(" ")}` : ""}</div>`
   );
 }
+function revealCurrentProjectSection() {
+  // A deep link to a later mobile tab must keep its active label visible.
+  // Adjust only the horizontal nav; never scroll the page past its heading.
+  const tabs = root.querySelector<HTMLElement>(".tabs");
+  const active = tabs?.querySelector<HTMLElement>('[aria-current="page"]');
+  if (!tabs || !active || tabs.scrollWidth <= tabs.clientWidth) return;
+  const nav = tabs.getBoundingClientRect();
+  const item = active.getBoundingClientRect();
+  const itemLeft = item.left - nav.left + tabs.scrollLeft;
+  const centered = itemLeft - (tabs.clientWidth - item.width) / 2;
+  tabs.scrollLeft = Math.max(
+    0,
+    Math.min(tabs.scrollWidth - tabs.clientWidth, centered),
+  );
+}
 async function render() {
   parseRoute();
   room = null;
@@ -782,6 +797,7 @@ async function render() {
         );
       }
       root.innerHTML = shell(projectView());
+      revealCurrentProjectSection();
       if (target)
         document
           .getElementById("record-" + target)
