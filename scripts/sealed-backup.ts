@@ -318,7 +318,10 @@ function checkArchive(
     // The temporary plaintext always stays inside the owner-only directory.
     if (publishPath) {
       validateSnapshot(restored);
-      if (occupiedPath(publishPath + "-wal") || occupiedPath(publishPath + "-shm"))
+      if (
+        occupiedPath(publishPath + "-wal") ||
+        occupiedPath(publishPath + "-shm")
+      )
         throw new Error("Restored database destination has SQLite sidecars.");
       const restoredSha256 = fileSha256(restored);
       const fd = openSync(restored, constants.O_RDONLY);
