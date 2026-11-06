@@ -194,11 +194,24 @@ export function application(
           const migrations = s.get(
             "SELECT COUNT(*) AS applied, SUM(CASE WHEN c.version IS NULL THEN 1 ELSE 0 END) AS unmatched FROM migrations m LEFT JOIN migration_checksums c ON c.version=m.version",
           );
-          // Prepare representative account, session and record reads. An empty
-          // installation is valid; a missing essential table is not.
-          s.get("SELECT id FROM users LIMIT 1");
-          s.get("SELECT hash FROM sessions LIMIT 1");
-          s.get("SELECT id FROM records LIMIT 1");
+          // Exercise the critical auth, project and write-limit schemas without
+          // reading application records. An empty installation is valid, but
+          // a missing required table/column must make readiness fail closed.
+          for (const query of [
+            "SELECT id FROM users LIMIT 1",
+            "SELECT hash FROM sessions LIMIT 1",
+            "SELECT organization_id,user_id,role FROM organization_members LIMIT 1",
+            "SELECT id,organization_id,owner_id,status FROM projects LIMIT 1",
+            "SELECT project_id,user_id,role,revoked_at,expires_at FROM memberships LIMIT 1",
+            "SELECT id,project_id,token_hash,expires_at FROM invitations LIMIT 1",
+            "SELECT id,project_id,kind,visibility FROM records LIMIT 1",
+            "SELECT id,project_id,status FROM tasks LIMIT 1",
+            "SELECT id,project_id,visibility FROM releases LIMIT 1",
+            "SELECT id,project_id,client_id,status FROM client_decision_requests LIMIT 1",
+            "SELECT user_id,project_id,action FROM notifications LIMIT 1",
+            "SELECT key,count,resets_at FROM rate_limits LIMIT 1",
+          ])
+            s.get(query);
           ready =
             organization?.present === 1 &&
             Number(migrations?.applied ?? 0) > 0 &&
