@@ -478,10 +478,11 @@ export function application(
           1,
         );
         const result = s.all(
-          `SELECT r.id,r.project_id,r.kind,r.title FROM records r JOIN memberships m ON m.project_id=r.project_id JOIN projects p ON p.id=r.project_id WHERE m.user_id=? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND p.organization_id=? AND (m.role<>'client' OR r.visibility='client') AND (instr(lower(r.title),lower(?))>0 OR instr(lower(r.body),lower(?))>0) LIMIT 50`,
+          `SELECT r.id,r.project_id,r.kind,r.title FROM records r JOIN memberships m ON m.project_id=r.project_id JOIN projects p ON p.id=r.project_id WHERE m.user_id=? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND p.organization_id=? AND (m.role<>'client' OR (r.visibility='client' AND (r.kind NOT IN ('feedback','support') OR r.actor_id=?))) AND (instr(lower(r.title),lower(?))>0 OR instr(lower(r.body),lower(?))>0) LIMIT 50`,
           user,
           now(),
           config.organization,
+          user,
           q,
           q,
         );
@@ -690,7 +691,11 @@ export function application(
             project,
           );
           assert(
-            r && (!client || r.visibility === "client"),
+            r &&
+              (!client ||
+                (r.visibility === "client" &&
+                  (!["feedback", "support"].includes(r.kind) ||
+                    r.actor_id === user))),
             404,
             "Record not found.",
           );
@@ -700,12 +705,16 @@ export function application(
 
         if (method === "GET" && record[2] === "/history") {
           const r = s.get(
-            "SELECT visibility FROM records WHERE id=? AND project_id=?",
+            "SELECT visibility,kind,actor_id FROM records WHERE id=? AND project_id=?",
             recordId,
             project,
           );
           assert(
-            r && (!client || r.visibility === "client"),
+            r &&
+              (!client ||
+                (r.visibility === "client" &&
+                  (!["feedback", "support"].includes(r.kind) ||
+                    r.actor_id === user))),
             404,
             "Record not found.",
           );
