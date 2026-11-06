@@ -56,8 +56,13 @@ export class Domain {
       }
   }
   projects(user: string, clients = false) {
+    // Client Space uses an explicit public project projection, consistent
+    // with room(): never expose owner_id or organization_id via the list.
+    const fields = clients
+      ? "p.id,p.name,p.purpose,p.scope,p.status,p.updated_at,m.role"
+      : "p.*,m.role";
     return this.s.all(
-      `SELECT p.*,m.role FROM projects p JOIN memberships m ON m.project_id=p.id WHERE m.user_id=? AND p.organization_id=? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) ${clients ? "AND m.role='client'" : "AND m.role<>'client'"} ORDER BY p.updated_at DESC`,
+      `SELECT ${fields} FROM projects p JOIN memberships m ON m.project_id=p.id WHERE m.user_id=? AND p.organization_id=? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) ${clients ? "AND m.role='client'" : "AND m.role<>'client'"} ORDER BY p.updated_at DESC`,
       user,
       this.organization,
       now(),
