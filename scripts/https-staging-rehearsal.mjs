@@ -62,7 +62,7 @@ async function waitForUpstream(port, child) {
       const r = await fetch("http://127.0.0.1:" + port + "/api/ready", {
         signal: AbortSignal.timeout(800),
       });
-      if (r.status === 200 && (await r.json()).status === "ok") return;
+      if (r.status === 200 && (await r.json()).status === "ready") return;
     } catch {
       // The loopback subprocess has not yet started listening.
     }
