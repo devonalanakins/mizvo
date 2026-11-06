@@ -124,6 +124,22 @@ test("health reports process liveness while readiness rejects missing database m
     await f.stop();
   }
 });
+test("readiness fails closed if core project authorization or rate-limit schema disappears", async () => {
+  for (const table of ["memberships", "organization_members", "rate_limits"]) {
+    const f = await fixture();
+    try {
+      assert.equal((await f.request("/ready")).status, 200);
+      // Only disposable synthetic databases may be fault-injected.
+      f.app.s.db.exec("DROP TABLE " + table);
+      const unavailable = await f.request("/ready");
+      assert.equal(unavailable.status, 503, table);
+      assert.deepEqual(unavailable.value, { status: "unavailable" });
+      assert.equal((await f.request("/health")).status, 200);
+    } finally {
+      await f.stop();
+    }
+  }
+});
 test("real HTTP Room workflow survives restart; proposals, history, concurrency and authorization", async () => {
   const f = await fixture();
   try {
