@@ -14,6 +14,7 @@ Node 24.22.1 serves all three web surfaces and the HTTP API on loopback, with SQ
 | `MIZVO_GITHUB_REPOSITORIES` | empty | Comma-separated exact owner/repository allowlist |
 | `MIZVO_GITHUB_TOKEN` | unset | Optional externally managed, read-only GitHub credential |
 | `MIZVO_ACCOUNT_PASSWORD` | required only by account CLI | Provisioning password; unset immediately afterward |
+| `MIZVO_EXPECTED_SERVER_SHA256` | unset (optional) | Exact lowercase 64-character SHA-256 of the reviewed compiled `dist/apps/api/server.js`; standalone startup refuses a malformed/mismatched value before opening SQLite |
 
 There is no automatic `.env` loader. Inject environment values through the process manager or your local shell. Secret values must not enter Git, application logs, public files or documentation.
 
