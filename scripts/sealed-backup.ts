@@ -34,7 +34,9 @@ const NONCE_SIZE = 12;
 const TAG_SIZE = 16;
 const HEADER_SIZE = MAGIC.length + NONCE_SIZE;
 const CHUNK_SIZE = 64 * 1024;
-const MAX_ARCHIVE = 128 * 1024 * 1024 * 1024; // bounded for a single-installation snapshot
+// Conservative per-nonce AES-GCM cap, well below the cipher's maximum.
+const MAX_ARCHIVE = 16 * 1024 * 1024 * 1024;
+const MAX_SNAPSHOT = MAX_ARCHIVE - HEADER_SIZE - TAG_SIZE;
 
 function requireAbsolute(value: string, name: string): string {
   if (!isAbsolute(value)) throw new Error(name + " must use an absolute path.");
@@ -45,7 +47,8 @@ function regularFile(path: string, name: string) {
   const entry = lstatSync(path);
   if (!entry.isFile() || entry.isSymbolicLink())
     throw new Error(name + " must be a regular file, not a symlink.");
-  if (entry.size < 100 || entry.size > MAX_ARCHIVE)
+  const limit = name === "Snapshot" ? MAX_SNAPSHOT : MAX_ARCHIVE;
+  if (entry.size < 100 || entry.size > limit)
     throw new Error(name + " size is outside allowed limits.");
   return entry;
 }
