@@ -111,10 +111,7 @@ test("health reports process liveness while readiness rejects missing database m
     const ready = await f.request("/ready");
     assert.equal(ready.status, 200);
     assert.deepEqual(ready.value, { status: "ready" });
-    assert.equal(
-      (await f.request("/ready", "POST", {})).status,
-      405,
-    );
+    assert.equal((await f.request("/ready", "POST", {})).status, 405);
 
     // A synthetic storage failure must not be concealed by a listening
     // process; no existing user, client, or production database is touched.
