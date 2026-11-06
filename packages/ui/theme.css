@@ -1525,6 +1525,38 @@ pre {
   border-top: 1px solid #5b5147;
   padding-top: 16px;
 }
+/* One actual next action, never simulated productivity progress. */
+.home-action {
+  margin-bottom: 26px;
+  border-color: #78614b;
+  background: linear-gradient(120deg, #2b241e, #1a1d23 68%);
+}
+.home-action .eyebrow {
+  color: var(--copper);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.home-action h2 {
+  font: 400 clamp(27px, 3vw, 38px) / 1.16 Editorial, Georgia, serif;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+.home-action .muted {
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+}
+.home-action .button {
+  margin-top: 6px;
+}
+@media (max-width: 550px) {
+  .home-action {
+    padding: 20px 16px;
+  }
+  .home-action .button {
+    width: 100%;
+  }
+}
+
 .decision-focus {
   margin-bottom: 22px;
   border-color: #866546;
