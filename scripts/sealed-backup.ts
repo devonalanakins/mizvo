@@ -261,7 +261,12 @@ function decrypt(archive: string, target: string, key: Buffer) {
   }
 }
 
-function checkArchive(archive: string, key: Buffer, directory: string) {
+function checkArchive(
+  archive: string,
+  key: Buffer,
+  directory: string,
+  publishPath?: string,
+) {
   privateDirectory(directory, "Recovery directory");
   const work = mkdtempSync(join(directory, ".mizvo-unseal-"));
   chmodSync(work, 0o700);
@@ -287,6 +292,35 @@ function checkArchive(archive: string, key: Buffer, directory: string) {
         throw new Error("Recovery session invalidation failed.");
     } finally {
       database.close();
+    }
+    // Offline restore is opt-in and may publish only after authentication,
+    // schema validation, and session invalidation have succeeded.
+    // The temporary plaintext always stays inside the owner-only directory.
+    if (publishPath) {
+      validateSnapshot(restored);
+      if (
+        existsSync(publishPath + "-wal") ||
+        existsSync(publishPath + "-shm")
+      )
+        throw new Error("Restored database destination has SQLite sidecars.");
+      const restoredSha256 = fileSha256(restored);
+      const fd = openSync(restored, constants.O_RDONLY);
+      try {
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+      // An exclusive hard link is atomic on the same filesystem and rejects
+      // pre-existing files, directories, and even dangling symlinks.
+      linkSync(restored, publishPath);
+      return {
+        snapshot_sha256: sha,
+        restored_sha256: restoredSha256,
+        snapshot_size_bytes: lstatSync(restored).size,
+        migration_count: snapshot.migrations,
+        isolated_sessions_invalidated: true,
+        offline_database_published: true,
+      };
     }
     return {
       snapshot_sha256: sha,
@@ -321,10 +355,10 @@ function seal(snapshot: string, archive: string, key: Buffer) {
 
 const [command, input, second, third, ...extra] = process.argv.slice(2);
 const usage =
-  "Usage: seal <absolute-snapshot.sqlite> <absolute-new-archive.mzseal> <absolute-32-byte-key> | verify <absolute-archive.mzseal> <absolute-key> <absolute-private-recovery-directory>";
+  "Usage: seal <absolute-snapshot.sqlite> <absolute-new-archive.mzseal> <absolute-32-byte-key> | verify <absolute-archive.mzseal> <absolute-key> <absolute-private-recovery-directory> | restore <absolute-archive.mzseal> <absolute-key> <absolute-new-offline.sqlite>";
 
 if (
-  !["seal", "verify"].includes(command ?? "") ||
+  !["seal", "verify", "restore"].includes(command ?? "") ||
   !input ||
   !second ||
   !third ||
@@ -343,7 +377,30 @@ if (
     if (unique.size !== 3)
       throw new Error("Snapshot, archive, key and recovery paths must differ.");
     key = readKey(keyPath);
-    if (command === "seal") {
+    if (command === "restore") {
+      if (!thirdPath.endsWith(".sqlite"))
+        throw new Error("Offline restore requires a new .sqlite destination.");
+      privateDirectory(dirname(thirdPath), "Offline restore directory");
+      if (existsSync(thirdPath + "-wal") || existsSync(thirdPath + "-shm"))
+        throw new Error("Restored database destination has SQLite sidecars.");
+      const result = checkArchive(source, key, dirname(thirdPath), thirdPath);
+      if (!result.offline_database_published || !result.restored_sha256)
+        throw new Error("Offline restore publication was not verified.");
+      console.log(
+        JSON.stringify({
+          schema: "mizvo.sealed-offline-restore.v1",
+          archive_sha256: fileSha256(source),
+          snapshot_sha256: result.snapshot_sha256,
+          restored_sha256: result.restored_sha256,
+          migration_count: result.migration_count,
+          isolated_sessions_invalidated: result.isolated_sessions_invalidated,
+          offline_database_published: true,
+          actual_production_recovery_verified: false,
+          external_off_host_transport_verified: false,
+          release_approved: false,
+        }),
+      );
+    } else if (command === "seal") {
       const result = seal(source, destination, key);
       console.log(
         JSON.stringify({
