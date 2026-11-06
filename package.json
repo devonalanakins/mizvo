@@ -1,6 +1,6 @@
 {
   "name": "mizvo-platform",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -19,6 +19,7 @@
     "lint": "prettier --check apps packages scripts tests package.json tsconfig.json .github",
     "format": "prettier --write apps packages scripts tests package.json tsconfig.json .github",
     "backup": "node scripts/backup.ts",
+    "backup:sealed": "node scripts/sealed-backup.ts",
     "recovery:drill": "node scripts/recovery-drill.ts",
     "verify:github": "node scripts/verify-github.ts",
     "test:distribution": "node scripts/verify-distribution.mjs",
