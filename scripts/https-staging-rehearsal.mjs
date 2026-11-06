@@ -328,6 +328,9 @@ async function main() {
       /default-src 'self'/,
     );
     assert.equal(health.value.storage, "sqlite");
+    const ready = await secureRequest(tlsPort, identity.cert, "/api/ready");
+    assert.equal(ready.status, 200);
+    assert.deepEqual(ready.value, { status: "ready" });
     const html = await secureRequest(tlsPort, identity.cert, "/");
     assert.equal(html.status, 200);
     assert.match(html.text, /Mizvo/);
