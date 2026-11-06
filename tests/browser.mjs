@@ -657,8 +657,10 @@ try {
     .getByRole("region", { name: "Suggested next action" })
     .getByRole("heading", { name: "A client decision needs your response." })
     .waitFor();
-  await client.getByRole("region", { name: "Suggested next action" })
-    .getByText("Approve the onboarding description").waitFor();
+  await client
+    .getByRole("region", { name: "Suggested next action" })
+    .getByText("Approve the onboarding description")
+    .waitFor();
   await capture(client, "client-home-action", 390);
   await client
     .getByRole("region", { name: "Suggested next action" })
