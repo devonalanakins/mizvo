@@ -61,6 +61,23 @@ function fixture() {
     "founder",
   );
   store.run(
+    "INSERT INTO projects(id,organization_id,name,purpose,scope,owner_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+    "synthetic-recovered-project",
+    "fictional-org",
+    "Restorable synthetic project",
+    "Recovery integrity test",
+    "Synthetic records only",
+    user.id,
+    now(),
+    now(),
+  );
+  store.run(
+    "INSERT INTO memberships VALUES (?,?,?,NULL,NULL)",
+    "synthetic-recovered-project",
+    user.id,
+    "owner",
+  );
+  store.run(
     "INSERT INTO sessions VALUES (?,?,?,?,?)",
     createHash("sha256").update("fictional-session-cookie").digest("hex"),
     user.id,
@@ -340,6 +357,16 @@ test("V0.24 offline restore recovers a copied encrypted archive without reactiva
       assert.equal(
         recovered.prepare("SELECT COUNT(*) AS count FROM sessions").get()?.count,
         0,
+      );
+      assert.equal(
+        recovered.prepare("SELECT COUNT(*) AS count FROM projects").get()?.count,
+        1,
+      );
+      assert.equal(
+        recovered
+          .prepare("SELECT COUNT(*) AS count FROM memberships")
+          .get()?.count,
+        1,
       );
       assert.equal(
         recovered.prepare(
