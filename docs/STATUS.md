@@ -1,6 +1,6 @@
 # Capability status
 
-V0.18 is a stacked, unmerged review candidate for an isolated synthetic localhost review session with real Studio and Client Space roles. V0.17 below it adds project task delegation, and V0.16 consolidates the earlier implementation stack. See [integration inventory, audit and staging gates](V0.16-INTEGRATION.md). Session/provider waits now reauthorize current access; release reviews retain an immutable audience and Client Space receives only the client’s own feedback. Migration 009 preserves legacy reviews as internal. Runtime version is 0.18.0 on this branch; no deployment is implied.
+V0.19 is a stacked, unmerged candidate for operator-only encrypted SQLite backup packaging and isolated recovery checks; V0.18 provides an isolated synthetic localhost review session with real Studio and Client Space roles. V0.17 below it adds project task delegation, and V0.16 consolidates the earlier implementation stack. See [integration inventory, audit and staging gates](V0.16-INTEGRATION.md). Session/provider waits now reauthorize current access; release reviews retain an immutable audience and Client Space receives only the client’s own feedback. Migration 009 preserves legacy reviews as internal. Runtime version is 0.19.0 on this branch; no deployment is implied.
 
 All implementation below is locally runnable review source, with public publication approved under AGPL-3.0-only. No application deployment is LIVE. Test evidence is recorded separately in VERIFICATION; these labels do not imply public release or legal/business status.
 
