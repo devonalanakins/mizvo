@@ -32,6 +32,10 @@ node dist/scripts/backup.js /approved-backups/mizvo-before-upgrade.sqlite
 
 The destination must not already exist, including an existing dangling symlink. The online backup helper creates and verifies the SQLite snapshot inside an owner-only (0700) temporary directory beside the destination, detaches WAL, integrity-checks it, sets its permissions to 0600, and then uses an exclusive same-filesystem hard link to publish the verified file without overwriting any existing path. On failure it removes temporary snapshot bytes and does not publish a partial destination. The operator must use a trusted local filesystem supporting atomic hard links, with a private/encrypted parent location and appropriate ACLs; this does not substitute for an off-host encrypted, tested backup and retention process. No off-host backup job or external storage has been activated.
 
+## V0.19 optional sealed backup archives
+
+The [sealed backup operator procedure](SEALED-BACKUPS.md) adds AES-256-GCM authenticated encryption **after** the existing validated plaintext SQLite backup, with a separate owner-private 32-byte key file, exclusive archive publication, and an isolated authenticated verification/restore drill. Neither an encrypted file on the same host nor a passing local verification receipt is evidence of an independent off-host backup or usable recovery-key custody. The source plaintext backup remains after sealing, and abrupt interruption can leave transient plaintext in the encrypted recovery filesystem. No key service, off-host transport, retention, or production restore is activated.
+
 ## Isolated offline recovery rehearsal
 
 After making a snapshot through the online backup command, perform an operator-only recovery rehearsal in an **approved encrypted private directory**. This does not expose the snapshot or restore any production database.

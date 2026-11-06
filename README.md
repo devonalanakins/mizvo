@@ -40,6 +40,10 @@ See [self-hosting](docs/SELF-HOSTING.md), [security boundaries](docs/SECURITY.md
 
 For an ephemeral, localhost-only Studio and Client Space session with a fictional founder, engineer and client, use `npm ci && npm run build && npm run review:local` in a **trusted interactive terminal**. All accounts and records are synthetic and discarded when the session ends. No mail, public hosting or customer data is involved. See [Local Review](docs/LOCAL-REVIEW.md). This is not a remotely accessible preview or a release approval.
 
+### Optional offline encrypted backup review
+
+The V0.19 candidate includes an operator-only `npm run backup:sealed` tool for authenticated encrypted archives of **already backed-up** SQLite files. It does not provide cloud storage or automatic backups; an approved private key and encrypted filesystem are required. See [Sealed Backup Procedure](docs/SEALED-BACKUPS.md).
+
 ## Verify
 
 ```sh

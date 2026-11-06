@@ -22,6 +22,10 @@ No open registration, collaborator email, automatic invitation delivery, AI proc
 - Checksummed, transactional, ordered SQL migrations; incompatible schema downgrades and edited migrations are refused. Backups use SQLite's online backup API, private temporary snapshot directories, integrity checks, and exclusive no-overwrite publication with restrictive permissions, never a raw copy of a live WAL file.
 - Generic internal errors and request IDs without request-body or credential logging.
 
+## V0.19 sealed backup threat boundary
+
+The optional operator CLI can authenticate/encrypt a verified detached SQLite snapshot with an externally managed owner-private 32-byte key, random nonce, AES-256-GCM, integrity/migration checks and exclusive publication; it never automatically uploads archives or alters the active database. Isolated restore checks delete temporary plaintext on normal completion/failure, but cannot guarantee crash-resistant cleanup or underlying filesystem encryption. Key custody/rotation, real off-host retention, restore tests, independent cryptographic review and provider controls remain unverified; use only approved encrypted private storage and separate key custody. See [Sealed backups](SEALED-BACKUPS.md).
+
 ## Limits that still govern release
 
 This is an engineering review build. No qualified human security signature, penetration test, real-user usability study, assistive-technology screen-reader session, production TLS/proxy test, private GitHub credential test, load test, or production recovery drill is claimed. The code-integrity review is a distinct adversarial pass by the implementation agent, not an independent human reviewer.
