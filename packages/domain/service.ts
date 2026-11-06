@@ -39,39 +39,57 @@ export class Domain {
       now(),
     );
     if (project) {
-      // A generic activity alert still reveals that something happened.
-      // Client-only support/feedback conversations and directed decisions
-      // therefore notify internal teammates and only the affected client.
-      const record =
-        action === "feedback.created" ||
-        action.startsWith("support.") ||
-        action === "record.edited"
-          ? this.s.get(
-              "SELECT kind,actor_id FROM records WHERE id=? AND project_id=?",
-              object,
-              project,
-            )
-          : null;
-      const directedDecision = action.startsWith("client_decision.");
-      const privateRecord =
-        record?.kind === "feedback" || record?.kind === "support";
-      const restricted = directedDecision || privateRecord;
-      const recipient = directedDecision
-        ? this.s.get(
+      // Generic "Project updated" alerts reveal event timing. Default to
+      // internal teammates only; a client receives alerts exclusively for
+      // shared project work or private actions addressed to that client.
+      const record = this.s.get(
+        "SELECT visibility,kind,actor_id FROM records WHERE id=? AND project_id=?",
+        object,
+        project,
+      );
+      let clientAudience: "team" | "shared" | "recipient" = "team";
+      let recipient: string | null = null;
+      if (record) {
+        if (record.kind === "feedback" || record.kind === "support") {
+          clientAudience = "recipient";
+          recipient = record.actor_id;
+        } else if (record.visibility === "client") clientAudience = "shared";
+      } else if (action.startsWith("client_decision.")) {
+        clientAudience = "recipient";
+        recipient =
+          this.s.get(
             "SELECT client_id FROM client_decision_requests WHERE id=? AND project_id=?",
             object,
             project,
-          )?.client_id
-        : privateRecord
-          ? record?.actor_id
-          : null;
+          )?.client_id ?? null;
+      } else if (action === "project.status_changed") {
+        clientAudience = "shared";
+      } else {
+        const sharedSource =
+          action === "brief.revised"
+            ? "SELECT visibility FROM project_brief_revisions WHERE id=? AND project_id=?"
+            : action === "ownership.plan_revised"
+              ? "SELECT visibility FROM project_ownership_revisions WHERE id=? AND project_id=?"
+              : action.startsWith("task.")
+                ? "SELECT visibility FROM tasks WHERE id=? AND project_id=?"
+                : action.startsWith("milestone.")
+                  ? "SELECT visibility FROM project_milestones WHERE id=? AND project_id=?"
+                  : action === "release.recorded"
+                    ? "SELECT visibility FROM releases WHERE id=? AND project_id=?"
+                    : null;
+        if (
+          sharedSource &&
+          this.s.get(sharedSource, object, project)?.visibility === "client"
+        )
+          clientAudience = "shared";
+      }
       for (const m of this.s.all(
-        `SELECT m.user_id FROM memberships m LEFT JOIN preferences p ON p.user_id=m.user_id WHERE m.project_id=? AND m.user_id<>? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND COALESCE(p.activity,1)=1 AND (?=0 OR m.role<>'client' OR m.user_id=?)`,
+        `SELECT m.user_id FROM memberships m LEFT JOIN preferences p ON p.user_id=m.user_id WHERE m.project_id=? AND m.user_id<>? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND COALESCE(p.activity,1)=1 AND (m.role<>'client' OR ?=1 OR m.user_id=?)`,
         project,
         actor,
         now(),
-        Number(restricted),
-        recipient,
+        Number(clientAudience === "shared"),
+        clientAudience === "recipient" ? recipient : null,
       )) {
         this.s.run(
           "INSERT INTO notifications VALUES (?,?,?,?,?,NULL)",
