@@ -689,6 +689,90 @@ test("client feedback and support stay private between clients on the same proje
   }
 });
 
+test("client project lists do not expose owner or organization identifiers", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const client = await f.login(f.users.client.email);
+    const other = await f.login(f.users.other.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "List scope review",
+          purpose: "Expose the minimum fields to invited clients.",
+          scope: "Shared scope only",
+        },
+        founder,
+      )
+    ).value.id;
+    const invite = await f.request(
+      "/projects/" + project + "/invitations",
+      "POST",
+      { email: f.users.client.email, role: "client" },
+      founder,
+    );
+    assert.equal(invite.status, 201);
+    assert.equal(
+      (
+        await f.request(
+          "/invitations/accept",
+          "POST",
+          { token: invite.value.token },
+          client,
+        )
+      ).status,
+      200,
+    );
+    const list = await f.request("/space/projects", "GET", undefined, client);
+    assert.equal(list.status, 200);
+    assert.equal(list.value.length, 1);
+    assert.deepEqual(
+      Object.keys(list.value[0]).sort(),
+      ["id", "name", "purpose", "scope", "status", "updated_at", "role"].sort(),
+    );
+    assert.equal(list.value[0].id, project);
+    assert.equal(list.value[0].role, "client");
+    assert(!JSON.stringify(list.value).includes(f.users.owner.id));
+    assert(!JSON.stringify(list.value).includes("test-org"));
+    const ownerList = await f.request("/projects", "GET", undefined, founder);
+    assert.equal(ownerList.status, 200);
+    assert.equal(ownerList.value[0].owner_id, f.users.owner.id);
+    assert.equal(ownerList.value[0].organization_id, "test-org");
+    assert.deepEqual(
+      (await f.request("/space/projects", "GET", undefined, other)).value,
+      [],
+    );
+    assert.equal(
+      (await f.request("/projects", "GET", undefined, client)).value.length,
+      0,
+    );
+    assert.equal(
+      (await f.request("/space/projects/" + project, "GET", undefined, client))
+        .status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.request(
+          "/projects/" + project + "/members/" + f.users.client.id,
+          "PATCH",
+          { revoke: true },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.deepEqual(
+      (await f.request("/space/projects", "GET", undefined, client)).value,
+      [],
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
 test("Client Space is a projection: no internal records, history, engineering, tasks or cross-client access", async () => {
   const f = await fixture();
   try {
