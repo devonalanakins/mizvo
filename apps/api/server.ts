@@ -722,16 +722,14 @@ export function application(
             404,
             "Record not found.",
           );
+          const entries = s.all(
+            "SELECT h.*,u.name AS actor FROM record_history h JOIN users u ON u.id=h.actor_id WHERE record_id=? ORDER BY version",
+            recordId,
+          );
           send(
             res,
             200,
-            (() => {
-              const entries = s.all(
-                "SELECT h.*,u.name AS actor FROM record_history h JOIN users u ON u.id=h.actor_id WHERE record_id=? ORDER BY version",
-                recordId,
-              );
-              return client ? entries.map(clientHistoryProjection) : entries;
-            })(),
+            client ? entries.map(clientHistoryProjection) : entries,
           );
           return;
         }
