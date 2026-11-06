@@ -128,6 +128,12 @@ export class Domain {
     );
     const values: any[] = [project];
     let where = client ? " AND r.visibility='client'" : "";
+    // Shared client-visible updates are available to all invited clients.
+    // Feedback and support are private conversations with the project team.
+    if (client) {
+      where += " AND (r.kind NOT IN ('feedback','support') OR r.actor_id=?)";
+      values.push(user);
+    }
     if (kind === "shared")
       where +=
         " AND r.visibility='client' AND r.kind NOT IN ('feedback','support')";
@@ -839,7 +845,11 @@ export class Domain {
       project,
     );
     assert(
-      r && (m.role !== "client" || r.visibility === "client"),
+      r &&
+        (m.role !== "client" ||
+          (r.visibility === "client" &&
+            (!["feedback", "support"].includes(r.kind) ||
+              r.actor_id === user))),
       404,
       "Record not found.",
     );
@@ -897,7 +907,9 @@ export class Domain {
         project,
       );
     assert(
-      r && (m.role !== "client" || r.visibility === "client"),
+      r &&
+        (m.role !== "client" ||
+          (r.visibility === "client" && r.actor_id === user)),
       404,
       "Support request not found.",
     );
