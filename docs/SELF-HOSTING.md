@@ -36,7 +36,7 @@ Use a dedicated non-root OS account. Keep the database directory mode 0700; back
 
 `GET /api/health` is an unauthenticated liveness signal indicating the process is serving HTTP; its `status: ok` is **not proof** the SQLite database or any application workflow is operational. Use unauthenticated `GET /api/ready` for host startup/readiness gates. It performs bounded read-only checks for the configured organization, migration/checksum correspondence, and essential user, session and record tables. It returns `200 {"status":"ready"}` on success or `503 {"status":"unavailable"}` if checks fail, without returning record content, SQL errors or schema details. The probe does not write data and cannot prove disk writeability, external integrations, recovery objectives, security approvals or deployed release identity. Do not use the public result as an authorization or production-acceptance signal; confirm authenticated journeys and independent backup restoration separately.
 
-The local synthetic staging and HTTPS proxy rehearsals require this readiness result before exercising accounts. Operations should treat repeated 503 results as a private investigation/rollback trigger and retain the existing process liveness signal for diagnosis; never clear or replace a production database merely because readiness fails.
+The local synthetic staging, HTTPS proxy and container health-check rehearsals require this readiness result before exercising accounts. Operations should treat repeated 503 results as a private investigation/rollback trigger and retain the existing process liveness signal for diagnosis; never clear or replace a production database merely because readiness fails.
 
 ## GitHub
 
