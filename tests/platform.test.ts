@@ -101,6 +101,32 @@ async function fixture(
     },
   };
 }
+test("health reports process liveness while readiness rejects missing database metadata", async () => {
+  const f = await fixture();
+  try {
+    const live = await f.request("/health");
+    assert.equal(live.status, 200);
+    assert.equal(live.value.status, "ok");
+
+    const ready = await f.request("/ready");
+    assert.equal(ready.status, 200);
+    assert.deepEqual(ready.value, { status: "ready" });
+    assert.equal(
+      (await f.request("/ready", "POST", {})).status,
+      405,
+    );
+
+    // A synthetic storage failure must not be concealed by a listening
+    // process; no existing user, client, or production database is touched.
+    f.app.s.db.exec("DROP TABLE migration_checksums");
+    const unavailable = await f.request("/ready");
+    assert.equal(unavailable.status, 503);
+    assert.deepEqual(unavailable.value, { status: "unavailable" });
+    assert.equal((await f.request("/health")).status, 200);
+  } finally {
+    await f.stop();
+  }
+});
 test("real HTTP Room workflow survives restart; proposals, history, concurrency and authorization", async () => {
   const f = await fixture();
   try {
