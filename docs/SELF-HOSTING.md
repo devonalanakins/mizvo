@@ -8,7 +8,7 @@ Node 24.22.1 serves all three web surfaces and the HTTP API on loopback, with SQ
 | --- | --- | --- |
 | `PORT` | `4173` | Loopback listener port |
 | `MIZVO_ORIGIN` | `http://localhost:4173` | Exact browser origin, including port; HTTPS required in production |
-| `MIZVO_DATABASE` | `var/mizvo.sqlite` | Persistent local database path |
+| `MIZVO_DATABASE` | `var/mizvo.sqlite` (local review only) | Explicit **absolute** persistent SQLite path required whenever `NODE_ENV=production`; no production default |
 | `MIZVO_ORGANIZATION` | `mizvo` | One installation’s organization ID; do not change on an existing database |
 | `NODE_ENV` | unset | Set `production` behind a verified TLS reverse proxy |
 | `MIZVO_GITHUB_REPOSITORIES` | empty | Comma-separated exact owner/repository allowlist |
@@ -16,7 +16,7 @@ Node 24.22.1 serves all three web surfaces and the HTTP API on loopback, with SQ
 | `MIZVO_ACCOUNT_PASSWORD` | required only by account CLI | Provisioning password; unset immediately afterward |
 | `MIZVO_EXPECTED_SERVER_SHA256` | unset (optional) | Exact lowercase 64-character SHA-256 of the reviewed compiled `dist/apps/api/server.js`; standalone startup refuses a malformed/mismatched value before opening SQLite |
 
-There is no automatic `.env` loader. Inject environment values through the process manager or your local shell. Secret values must not enter Git, application logs, public files or documentation.
+There is no automatic `.env` loader. Inject environment values through the process manager or your local shell. Secret values must not enter Git, application logs, public files or documentation. Standalone production startup now rejects an absent/relative `MIZVO_DATABASE`, invalid `PORT`, invalid bind address or HTTP origin **before opening or migrating SQLite**. The direct application constructor also validates a production HTTPS origin before opening storage. Local development still uses `var/mizvo.sqlite` by default. An absolute path alone does **not** prove that a volume is mounted, encrypted or durable; separately inspect the hosting volume and persistence.
 
 ## Build and run independently
 
