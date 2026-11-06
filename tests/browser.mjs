@@ -969,6 +969,32 @@ try {
     await client.locator("#record-title").inputValue(),
     "Client paging draft",
   );
+  // The client projection no longer carries actor_id. Verify that the
+  // authenticated author's Edit control and old-record deep link still work.
+  await client
+    .locator("#record-" + feedback.id)
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
+  await client
+    .locator("dialog")
+    .getByLabel("Title", { exact: true })
+    .fill("Client feedback edited through deep link");
+  await client
+    .getByRole("button", { name: "Save new version", exact: true })
+    .click();
+  await client
+    .getByRole("heading", {
+      name: "Client feedback edited through deep link",
+      exact: true,
+    })
+    .waitFor();
+  await settledReload(client);
+  await client
+    .getByRole("heading", {
+      name: "Client feedback edited through deep link",
+      exact: true,
+    })
+    .waitFor();
   assert.deepEqual(errors, []);
   assert.deepEqual(csp, []);
   await writeFile(
@@ -1004,6 +1030,7 @@ try {
           "reduced motion",
           "Room and client pagination with unsaved drafts",
           "older-record deep links, editing and reload",
+          "client feedback editing without internal actor identifiers",
         ],
       },
       null,
