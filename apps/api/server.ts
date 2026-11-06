@@ -56,13 +56,29 @@ export function application(
   config: Config,
   dependencies: { github?: GitHub; previewFetch?: typeof fetch } = {},
 ) {
-  // Refuse invalid production origins before opening or migrating SQLite.
+  // Validate every production caller, not just the standalone CLI.
+  // The origin must exactly match a browser's Origin header; paths, default
+  // port aliases, credentials and trailing slashes must not reach SQLite.
   const production = config.production === true;
-  assert(
-    !production || config.origin.startsWith("https://"),
-    500,
-    "Production requires an HTTPS origin.",
-  );
+  if (production) {
+    assert(
+      isAbsolute(config.database),
+      500,
+      "Production requires an explicit absolute MIZVO_DATABASE path.",
+    );
+    assert(
+      config.origin.startsWith("https://"),
+      500,
+      "Production requires an HTTPS origin.",
+    );
+    let exactOrigin = false;
+    try {
+      exactOrigin = new URL(config.origin).origin === config.origin;
+    } catch {
+      // A malformed URL is not a production origin.
+    }
+    assert(exactOrigin, 500, "Production requires an exact HTTPS origin.");
+  }
   const s = new Store(config.database),
     d = new Domain(s, config.organization),
     github =
