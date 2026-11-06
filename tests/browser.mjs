@@ -71,6 +71,13 @@ async function visit(p, url) {
   await p.goto(url);
   await p.waitForLoadState("networkidle");
 }
+async function settledReload(p) {
+  // The same rule applies to explicit reloads, not only cross-route visits.
+  // Keep the final zero-page-error assertion intact in both engines.
+  await p.waitForLoadState("networkidle");
+  await p.reload();
+  await p.waitForLoadState("networkidle");
+}
 async function signIn(p, email, path = "/studio") {
   await visit(p, config.origin + path);
   await p.getByLabel("Email", { exact: true }).fill(email);
@@ -321,7 +328,7 @@ try {
   await page
     .getByRole("heading", { name: "Keep decisions explicit" })
     .waitFor();
-  await page.reload();
+  await settledReload(page);
   await page
     .getByRole("heading", { name: "Architecture context, revised" })
     .waitFor();
@@ -718,7 +725,7 @@ try {
     { revoke: true },
   );
   assert.equal(revoke.status, 200);
-  await engineer.reload();
+  await settledReload(engineer);
   await engineer.getByRole("alert").waitFor();
   assert.match(
     await engineer.getByRole("alert").textContent(),
@@ -836,7 +843,7 @@ try {
       exact: true,
     })
     .waitFor();
-  await page.reload();
+  await settledReload(page);
   await page
     .getByRole("heading", {
       name: "Older note edited through deep link",
