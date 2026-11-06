@@ -476,6 +476,303 @@ test("independent accounts: scoped invitation, expiry, replay, role changes and 
     await f.stop();
   }
 });
+test("client feedback and support stay private between clients on the same project", async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.login(f.users.owner.email);
+    const alice = await f.login(f.users.client.email);
+    const bob = await f.login(f.users.other.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Shared project, private conversations",
+          purpose: "Prove clients do not read each other's private feedback.",
+        },
+        owner,
+      )
+    ).value.id;
+    const path = "/projects/" + project;
+    for (const [person, session] of [
+      [f.users.client, alice],
+      [f.users.other, bob],
+    ] as const) {
+      const invited = await f.request(
+        path + "/invitations",
+        "POST",
+        { email: person.email, role: "client" },
+        owner,
+      );
+      assert.equal(invited.status, 201);
+      const accepted = await f.request(
+        "/invitations/accept",
+        "POST",
+        { token: invited.value.token },
+        session,
+      );
+      assert.equal(accepted.status, 200);
+    }
+    const shared = (
+      await f.request(
+        path + "/records",
+        "POST",
+        {
+          kind: "note",
+          title: "SHARED_TEAM_NOTE",
+          body: "A deliberate client-visible update.",
+          visibility: "client",
+        },
+        owner,
+      )
+    ).value.id;
+    const feedback = (
+      await f.request(
+        "/space" + path + "/records",
+        "POST",
+        {
+          kind: "feedback",
+          title: "ALICE_PRIVATE_FEEDBACK",
+          body: "ALICE_PRIVATE_BODY",
+        },
+        alice,
+      )
+    ).value.id;
+    const support = (
+      await f.request(
+        "/space" + path + "/records",
+        "POST",
+        {
+          kind: "support",
+          title: "BOB_PRIVATE_SUPPORT",
+          body: "BOB_PRIVATE_BODY",
+        },
+        bob,
+      )
+    ).value.id;
+    const aliceRoom = await f.request("/space" + path, "GET", undefined, alice);
+    const bobRoom = await f.request("/space" + path, "GET", undefined, bob);
+    const teamRoom = await f.request(path, "GET", undefined, owner);
+    assert.equal(aliceRoom.status, 200);
+    assert.equal(bobRoom.status, 200);
+    assert.equal(teamRoom.status, 200);
+    assert(aliceRoom.value.records.some((r: any) => r.id === feedback));
+    assert(bobRoom.value.records.some((r: any) => r.id === support));
+    assert(aliceRoom.value.records.some((r: any) => r.id === shared));
+    assert(bobRoom.value.records.some((r: any) => r.id === shared));
+    assert(teamRoom.value.records.some((r: any) => r.id === feedback));
+    assert(teamRoom.value.records.some((r: any) => r.id === support));
+    assert(!JSON.stringify(aliceRoom.value).includes("BOB_PRIVATE_"));
+    assert(!JSON.stringify(bobRoom.value).includes("ALICE_PRIVATE_"));
+    for (const [session, own, forbidden, marker] of [
+      [alice, feedback, support, "BOB_PRIVATE_"],
+      [bob, support, feedback, "ALICE_PRIVATE_"],
+    ] as const) {
+      for (const kind of [
+        "",
+        "?kind=feedback",
+        "?kind=support",
+        "?kind=shared",
+      ]) {
+        const page = await f.request(
+          "/space" + path + "/records" + kind,
+          "GET",
+          undefined,
+          session,
+        );
+        assert.equal(page.status, 200);
+        assert(!JSON.stringify(page.value).includes(marker));
+      }
+      assert.equal(
+        (
+          await f.request(
+            "/space" + path + "/records/" + own,
+            "GET",
+            undefined,
+            session,
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await f.request(
+            "/space" + path + "/records/" + own + "/history",
+            "GET",
+            undefined,
+            session,
+          )
+        ).status,
+        200,
+      );
+      for (const suffix of ["", "/history"]) {
+        assert.equal(
+          (
+            await f.request(
+              "/space" + path + "/records/" + forbidden + suffix,
+              "GET",
+              undefined,
+              session,
+            )
+          ).status,
+          404,
+        );
+      }
+      assert.equal(
+        (
+          await f.request(
+            "/space" + path + "/records/" + forbidden,
+            "PATCH",
+            { title: "Unauthorized", body: "Denied", version: 1 },
+            session,
+          )
+        ).status,
+        404,
+      );
+      assert.equal(
+        (
+          await f.request(
+            "/space" + path + "/records/" + forbidden + "/status",
+            "POST",
+            { state: "open", version: 1 },
+            session,
+          )
+        ).status,
+        404,
+      );
+      for (const query of ["ALICE_PRIVATE_", "BOB_PRIVATE_"]) {
+        const result = await f.request(
+          "/search?q=" + query,
+          "GET",
+          undefined,
+          session,
+        );
+        assert.equal(result.status, 200);
+        assert(!JSON.stringify(result.value).includes(marker));
+      }
+      const sharedLookup = await f.request(
+        "/space" + path + "/records/" + shared,
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(sharedLookup.status, 200);
+    }
+    assert(
+      (
+        await f.request("/search?q=ALICE_PRIVATE_", "GET", undefined, owner)
+      ).value.some((r: any) => r.id === feedback),
+    );
+    assert(
+      (
+        await f.request("/search?q=BOB_PRIVATE_", "GET", undefined, owner)
+      ).value.some((r: any) => r.id === support),
+    );
+    const revoked = await f.request(
+      path + "/members/" + f.users.client.id,
+      "PATCH",
+      { revoke: true },
+      owner,
+    );
+    assert.equal(revoked.status, 200);
+    assert.equal(
+      (await f.request("/space" + path, "GET", undefined, alice)).status,
+      404,
+    );
+    assert.equal(
+      (await f.request("/search?q=ALICE_PRIVATE_", "GET", undefined, alice))
+        .value.length,
+      0,
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
+test("client project lists do not expose owner or organization identifiers", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const client = await f.login(f.users.client.email);
+    const other = await f.login(f.users.other.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "List scope review",
+          purpose: "Expose the minimum fields to invited clients.",
+          scope: "Shared scope only",
+        },
+        founder,
+      )
+    ).value.id;
+    const invite = await f.request(
+      "/projects/" + project + "/invitations",
+      "POST",
+      { email: f.users.client.email, role: "client" },
+      founder,
+    );
+    assert.equal(invite.status, 201);
+    assert.equal(
+      (
+        await f.request(
+          "/invitations/accept",
+          "POST",
+          { token: invite.value.token },
+          client,
+        )
+      ).status,
+      200,
+    );
+    const list = await f.request("/space/projects", "GET", undefined, client);
+    assert.equal(list.status, 200);
+    assert.equal(list.value.length, 1);
+    assert.deepEqual(
+      Object.keys(list.value[0]).sort(),
+      ["id", "name", "purpose", "scope", "status", "updated_at", "role"].sort(),
+    );
+    assert.equal(list.value[0].id, project);
+    assert.equal(list.value[0].role, "client");
+    assert(!JSON.stringify(list.value).includes(f.users.owner.id));
+    assert(!JSON.stringify(list.value).includes("test-org"));
+    const ownerList = await f.request("/projects", "GET", undefined, founder);
+    assert.equal(ownerList.status, 200);
+    assert.equal(ownerList.value[0].owner_id, f.users.owner.id);
+    assert.equal(ownerList.value[0].organization_id, "test-org");
+    assert.deepEqual(
+      (await f.request("/space/projects", "GET", undefined, other)).value,
+      [],
+    );
+    assert.equal(
+      (await f.request("/projects", "GET", undefined, client)).value.length,
+      0,
+    );
+    assert.equal(
+      (await f.request("/space/projects/" + project, "GET", undefined, client))
+        .status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.request(
+          "/projects/" + project + "/members/" + f.users.client.id,
+          "PATCH",
+          { revoke: true },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.deepEqual(
+      (await f.request("/space/projects", "GET", undefined, client)).value,
+      [],
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
 test("Client Space is a projection: no internal records, history, engineering, tasks or cross-client access", async () => {
   const f = await fixture();
   try {
@@ -1087,6 +1384,201 @@ test("password changes invalidate other sessions, reject wrong current password,
     await f.stop();
   }
 });
+test("client notifications reveal only shared updates or private actions addressed to them", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const alice = await f.login(f.users.client.email);
+    const bob = await f.login(f.users.other.email);
+    const engineer = await f.login(f.users.contributor.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Notification audience isolation",
+          purpose: "Keep private support activity from other clients.",
+        },
+        founder,
+      )
+    ).value.id;
+    const path = "/projects/" + project;
+    for (const [person, session, role] of [
+      [f.users.client, alice, "client"],
+      [f.users.other, bob, "client"],
+      [f.users.contributor, engineer, "contributor"],
+    ] as const) {
+      const invited = await f.request(
+        path + "/invitations",
+        "POST",
+        { email: person.email, role },
+        founder,
+      );
+      assert.equal(invited.status, 201);
+      assert.equal(
+        (
+          await f.request(
+            "/invitations/accept",
+            "POST",
+            { token: invited.value.token },
+            session,
+          )
+        ).status,
+        200,
+      );
+    }
+    // Order: team owner, client Alice, client Bob, team engineer.
+    const members = [founder, alice, bob, engineer];
+    const counts = async () =>
+      Promise.all(
+        members.map(async (session) => {
+          const response = await f.request(
+            "/notifications",
+            "GET",
+            undefined,
+            session,
+          );
+          assert.equal(response.status, 200);
+          return response.value.filter((n: any) => n.project_id === project)
+            .length;
+        }),
+      );
+    let previous = await counts();
+    const expectDelta = async (expected: number[]) => {
+      const current = await counts();
+      assert.deepEqual(
+        current.map((count, index) => count - previous[index]!),
+        expected,
+      );
+      previous = current;
+    };
+    const feedback = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "feedback",
+        title: "ALICE_ONLY",
+        body: "Fictional private feedback.",
+      },
+      alice,
+    );
+    assert.equal(feedback.status, 201);
+    await expectDelta([1, 0, 0, 1]);
+    const support = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "support",
+        title: "BOB_ONLY",
+        body: "Fictional private support.",
+      },
+      bob,
+    );
+    assert.equal(support.status, 201);
+    await expectDelta([1, 0, 0, 1]);
+    assert.equal(
+      (
+        await f.request(
+          path + "/records/" + support.value.id + "/status",
+          "POST",
+          { state: "resolved", version: 1 },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    await expectDelta([0, 0, 1, 1]);
+    assert.equal(
+      (
+        await f.request(
+          path + "/records",
+          "POST",
+          {
+            kind: "note",
+            title: "Internal-only plan",
+            body: "This activity is not client-facing.",
+            visibility: "internal",
+          },
+          founder,
+        )
+      ).status,
+      201,
+    );
+    await expectDelta([0, 0, 0, 1]);
+    assert.equal(
+      (
+        await f.request(
+          path + "/records",
+          "POST",
+          {
+            kind: "note",
+            title: "Shared client update",
+            body: "Both clients should learn that their project changed.",
+            visibility: "client",
+          },
+          founder,
+        )
+      ).status,
+      201,
+    );
+    await expectDelta([0, 1, 1, 1]);
+    const requested = await f.request(
+      path + "/client-decisions",
+      "POST",
+      {
+        client_id: f.users.client.id,
+        title: "Private client decision",
+        body: "Only Alice is asked to respond.",
+      },
+      founder,
+    );
+    assert.equal(requested.status, 201);
+    await expectDelta([0, 1, 0, 1]);
+    assert.equal(
+      (
+        await f.request(
+          "/space" +
+            path +
+            "/client-decisions/" +
+            requested.value.id +
+            "/respond",
+          "POST",
+          {
+            outcome: "accepted",
+            comment: "Reviewed by fictional Alice.",
+            version: 1,
+          },
+          alice,
+        )
+      ).status,
+      200,
+    );
+    await expectDelta([1, 0, 0, 1]);
+    const bobAlerts = (await f.request("/notifications", "GET", undefined, bob))
+      .value;
+    assert(!JSON.stringify(bobAlerts).includes("ALICE_ONLY"));
+    assert(!JSON.stringify(bobAlerts).includes("Private client decision"));
+    assert.equal(
+      (
+        await f.request(
+          path + "/members/" + f.users.other.id,
+          "PATCH",
+          { revoke: true },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.deepEqual(
+      (await f.request("/notifications", "GET", undefined, bob)).value,
+      [],
+      "Revoked clients cannot retrieve historical notifications.",
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
 test("grant expiry, cross-project object IDs, private notifications, and preference controls", async () => {
   const f = await fixture();
   try {
@@ -1249,6 +1741,248 @@ test("password verification preserves whitespace and uses explicit recorded work
   assert.equal(await verifyPassword(value, hash), true);
   assert.equal(await verifyPassword(value.trim(), hash), false);
 });
+test("client feedback and support stay private between invited clients on one project", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const first = await f.login(f.users.client.email);
+    const second = await f.login(f.users.other.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Private client conversations",
+          purpose: "Test two invited client identities.",
+        },
+        founder,
+      )
+    ).value.id;
+    const path = `/projects/${project}`;
+    for (const [person, session] of [
+      [f.users.client, first],
+      [f.users.other, second],
+    ] as const) {
+      const invite = await f.request(
+        path + "/invitations",
+        "POST",
+        { email: person.email, role: "client" },
+        founder,
+      );
+      assert.equal(invite.status, 201);
+      const accepted = await f.request(
+        "/invitations/accept",
+        "POST",
+        { token: invite.value.token },
+        session,
+      );
+      assert.equal(accepted.status, 200);
+    }
+    const firstFeedback = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "feedback",
+        title: "FIRST_CLIENT_FEEDBACK_SECRET",
+        body: "PRIVATE_ALPHA_SENTENCE",
+      },
+      first,
+    );
+    assert.equal(firstFeedback.status, 201);
+    const firstSupport = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "support",
+        title: "FIRST_CLIENT_SUPPORT_SECRET",
+        body: "PRIVATE_FIRST_SUPPORT_DETAILS",
+      },
+      first,
+    );
+    assert.equal(firstSupport.status, 201);
+    const secondFeedback = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "feedback",
+        title: "SECOND_CLIENT_FEEDBACK_SECRET",
+        body: "PRIVATE_BETA_SENTENCE",
+      },
+      second,
+    );
+    assert.equal(secondFeedback.status, 201);
+    const shared = await f.request(
+      path + "/records",
+      "POST",
+      {
+        kind: "note",
+        title: "SHARED_PROJECT_UPDATE",
+        body: "Nonprivate shared news.",
+        visibility: "client",
+      },
+      founder,
+    );
+    assert.equal(shared.status, 201);
+    for (const [session, own, other, ownSecret, otherSecret] of [
+      [
+        first,
+        [firstFeedback.value.id, firstSupport.value.id],
+        [secondFeedback.value.id],
+        "FIRST_CLIENT_FEEDBACK_SECRET",
+        "SECOND_CLIENT_FEEDBACK_SECRET",
+      ],
+      [
+        second,
+        [secondFeedback.value.id],
+        [firstFeedback.value.id, firstSupport.value.id],
+        "SECOND_CLIENT_FEEDBACK_SECRET",
+        "FIRST_CLIENT_FEEDBACK_SECRET",
+      ],
+    ] as const) {
+      const room = await f.request("/space" + path, "GET", undefined, session);
+      assert.equal(room.status, 200);
+      const roomIds = room.value.records.map((r: any) => r.id);
+      for (const id of own) assert(roomIds.includes(id));
+      for (const id of other) assert(!roomIds.includes(id));
+      assert(roomIds.includes(shared.value.id));
+      const roomJSON = JSON.stringify(room.value);
+      assert(roomJSON.includes(ownSecret));
+      assert(!roomJSON.includes(otherSecret));
+      assert(
+        !roomJSON.includes(
+          session === second
+            ? "PRIVATE_FIRST_SUPPORT_DETAILS"
+            : "PRIVATE_BETA_SENTENCE",
+        ),
+      );
+      for (const filter of ["feedback", "support"]) {
+        const result = await f.request(
+          "/space" + path + "/records?kind=" + filter,
+          "GET",
+          undefined,
+          session,
+        );
+        assert.equal(result.status, 200);
+        for (const r of result.value.records) {
+          assert(
+            own.includes(r.id),
+            "Other-client record appeared in paginated " + filter,
+          );
+        }
+      }
+      for (const id of other) {
+        assert.equal(
+          (
+            await f.request(
+              "/space" + path + "/records/" + id,
+              "GET",
+              undefined,
+              session,
+            )
+          ).status,
+          404,
+        );
+        assert.equal(
+          (
+            await f.request(
+              "/space" + path + "/records/" + id + "/history",
+              "GET",
+              undefined,
+              session,
+            )
+          ).status,
+          404,
+        );
+        assert.equal(
+          (
+            await f.request(
+              "/space" + path + "/records/" + id,
+              "PATCH",
+              {
+                version: 1,
+                title: "Unauthorized update",
+                body: "Unauthorized",
+              },
+              session,
+            )
+          ).status,
+          404,
+        );
+      }
+      const ownDirect = await f.request(
+        "/space" + path + "/records/" + own[0],
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(ownDirect.status, 200);
+      assert.equal(ownDirect.value.id, own[0]);
+      const searchOther = await f.request(
+        "/search?q=" + otherSecret,
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(searchOther.status, 200);
+      assert.equal(searchOther.value.length, 0);
+      const searchOwn = await f.request(
+        "/search?q=" + ownSecret,
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(searchOwn.status, 200);
+      assert.equal(searchOwn.value.length, 1);
+      assert.equal(searchOwn.value[0].id, own[0]);
+      const searchShared = await f.request(
+        "/search?q=SHARED_PROJECT_UPDATE",
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(searchShared.status, 200);
+      assert(
+        searchShared.value.some((record: any) => record.id === shared.value.id),
+      );
+    }
+    assert.equal(
+      (
+        await f.request(
+          "/space" + path + "/records/" + firstSupport.value.id + "/status",
+          "POST",
+          { state: "open", version: 1 },
+          second,
+        )
+      ).status,
+      404,
+    );
+    const team = await f.request(path, "GET", undefined, founder);
+    assert.equal(team.status, 200);
+    const teamIds = team.value.records.map((r: any) => r.id);
+    for (const id of [
+      firstFeedback.value.id,
+      firstSupport.value.id,
+      secondFeedback.value.id,
+      shared.value.id,
+    ]) {
+      assert(teamIds.includes(id), "Project owner lost a project record");
+    }
+    assert.equal(
+      (
+        await f.request(
+          path + "/records/" + firstSupport.value.id + "/history",
+          "GET",
+          undefined,
+          founder,
+        )
+      ).status,
+      200,
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
 test("client support requests have attributable team resolution and client reopening with version protection", async () => {
   const f = await fixture();
   try {
@@ -2466,6 +3200,167 @@ test("targeted client decisions keep request versions, recipient isolation and i
         )
       ).status,
       404,
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
+test("V0.20 Client Space home includes only current decisions addressed to that client", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const first = await f.login(f.users.client.email);
+    const second = await f.login(f.users.other.email);
+    const engineer = await f.login(f.users.contributor.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Next action privacy",
+          purpose: "Keep client decisions scoped.",
+        },
+        founder,
+      )
+    ).value.id;
+    const path = "/projects/" + project;
+    assert.deepEqual(
+      (await f.request("/space/home", "GET", undefined, first)).value
+        .client_decisions,
+      [],
+    );
+    for (const [user, session, role] of [
+      [f.users.client, first, "client"],
+      [f.users.other, second, "client"],
+      [f.users.contributor, engineer, "contributor"],
+    ] as const) {
+      const invitation = await f.request(
+        path + "/invitations",
+        "POST",
+        { email: user.email, role },
+        founder,
+      );
+      assert.equal(invitation.status, 201);
+      assert.equal(
+        (
+          await f.request(
+            "/invitations/accept",
+            "POST",
+            { token: invitation.value.token },
+            session,
+          )
+        ).status,
+        200,
+      );
+    }
+    const brief = {
+      problem: "People need a clear decision.",
+      audience: "The invited client.",
+      outcome: "Respond to one current request.",
+      success_criteria: "Only the intended recipient sees it.",
+      exclusions: "Internal notes.",
+      assumptions: "Synthetic review.",
+    };
+    const shared = await f.request(
+      path + "/brief-revisions",
+      "POST",
+      { ...brief, visibility: "client", base_revision: 0 },
+      founder,
+    );
+    assert.equal(shared.status, 201);
+    const addressed = await f.request(
+      path + "/client-decisions",
+      "POST",
+      {
+        client_id: f.users.client.id,
+        title: "FIRST_CLIENT_PRIVATE_ACTION",
+        body: "Is the fictional interface clear?",
+        brief_revision_id: shared.value.id,
+      },
+      founder,
+    );
+    assert.equal(addressed.status, 201);
+    const other = await f.request(
+      path + "/client-decisions",
+      "POST",
+      {
+        client_id: f.users.other.id,
+        title: "SECOND_CLIENT_PRIVATE_ACTION",
+        body: "Another recipient-specific question.",
+      },
+      founder,
+    );
+    assert.equal(other.status, 201);
+    const clientHome = (await f.request("/space/home", "GET", undefined, first))
+      .value;
+    assert.equal(clientHome.client_decisions.length, 1);
+    assert.equal(clientHome.client_decisions[0].id, addressed.value.id);
+    assert.equal(
+      clientHome.client_decisions[0].title,
+      "FIRST_CLIENT_PRIVATE_ACTION",
+    );
+    assert.equal(clientHome.client_decisions[0].project_id, project);
+    assert.equal(clientHome.decisions.length, 0);
+    assert(
+      !JSON.stringify(clientHome).includes("SECOND_CLIENT_PRIVATE_ACTION"),
+    );
+    assert(
+      !JSON.stringify(clientHome).includes("Is the fictional interface clear?"),
+    );
+    const otherHome = (await f.request("/space/home", "GET", undefined, second))
+      .value;
+    assert.deepEqual(
+      otherHome.client_decisions.map((d: any) => d.id),
+      [other.value.id],
+    );
+    assert(!JSON.stringify(otherHome).includes("FIRST_CLIENT_PRIVATE_ACTION"));
+    const engineerHome = (await f.request("/home", "GET", undefined, engineer))
+      .value;
+    assert.deepEqual(engineerHome.client_decisions, []);
+    assert(
+      !JSON.stringify(engineerHome).includes("FIRST_CLIENT_PRIVATE_ACTION"),
+    );
+    const revised = await f.request(
+      path + "/brief-revisions",
+      "POST",
+      {
+        ...brief,
+        outcome: "Revised outcome",
+        visibility: "client",
+        base_revision: 1,
+      },
+      founder,
+    );
+    assert.equal(revised.status, 201);
+    assert.deepEqual(
+      (await f.request("/space/home", "GET", undefined, first)).value
+        .client_decisions,
+      [],
+      "A request linked to a superseded shared brief must not be actionable.",
+    );
+    assert.equal(
+      (await f.request("/space/home", "GET", undefined, second)).value
+        .client_decisions.length,
+      1,
+      "An unlinked request can remain actionable.",
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/members/" + f.users.other.id,
+          "PATCH",
+          { revoke: true },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.deepEqual(
+      (await f.request("/space/home", "GET", undefined, second)).value
+        .client_decisions,
+      [],
+      "A revoked membership cannot see prior requests.",
     );
   } finally {
     await f.stop();

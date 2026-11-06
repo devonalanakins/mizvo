@@ -171,7 +171,7 @@ export function application(
       if (path === "/api/health" && method === "GET") {
         send(res, 200, {
           status: "ok",
-          version: "0.19.0",
+          version: "0.20.0",
           storage: "sqlite",
           release: "local-review",
         });
@@ -337,6 +337,24 @@ export function application(
               ...ids,
             )
           : [];
+        // Only decisions addressed to this signed-in client, in projects with
+        // current active access and linked to the latest shared brief.
+        // Do not surface stale, cancelled, answered, or other-client requests.
+        const client_decisions =
+          client && ids.length
+            ? s.all(
+                `SELECT d.id,d.project_id,d.title FROM client_decision_requests d
+                 WHERE d.project_id IN (${placeholders}) AND d.client_id=? AND d.status='pending'
+                   AND (d.brief_revision_id IS NULL OR d.brief_revision_id=(
+                     SELECT br.id FROM project_brief_revisions br
+                     WHERE br.project_id=d.project_id AND br.visibility='client'
+                     ORDER BY br.revision DESC LIMIT 1
+                   ))
+                 ORDER BY d.created_at,d.id LIMIT 10`,
+                ...ids,
+                user,
+              )
+            : [];
         const activity =
           !client && ids.length
             ? s.all(
@@ -344,7 +362,12 @@ export function application(
                 ...ids,
               )
             : [];
-        send(res, 200, { decisions: pending, tasks, activity });
+        send(res, 200, {
+          decisions: client ? [] : pending,
+          client_decisions,
+          tasks,
+          activity,
+        });
         return;
       }
       if (path === "/api/me" && method === "GET") {
@@ -455,10 +478,11 @@ export function application(
           1,
         );
         const result = s.all(
-          `SELECT r.id,r.project_id,r.kind,r.title FROM records r JOIN memberships m ON m.project_id=r.project_id JOIN projects p ON p.id=r.project_id WHERE m.user_id=? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND p.organization_id=? AND (m.role<>'client' OR r.visibility='client') AND (instr(lower(r.title),lower(?))>0 OR instr(lower(r.body),lower(?))>0) LIMIT 50`,
+          `SELECT r.id,r.project_id,r.kind,r.title FROM records r JOIN memberships m ON m.project_id=r.project_id JOIN projects p ON p.id=r.project_id WHERE m.user_id=? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND p.organization_id=? AND (m.role<>'client' OR (r.visibility='client' AND (r.kind NOT IN ('feedback','support') OR r.actor_id=?))) AND (instr(lower(r.title),lower(?))>0 OR instr(lower(r.body),lower(?))>0) LIMIT 50`,
           user,
           now(),
           config.organization,
+          user,
           q,
           q,
         );
@@ -667,7 +691,11 @@ export function application(
             project,
           );
           assert(
-            r && (!client || r.visibility === "client"),
+            r &&
+              (!client ||
+                (r.visibility === "client" &&
+                  (!["feedback", "support"].includes(r.kind) ||
+                    r.actor_id === user))),
             404,
             "Record not found.",
           );
@@ -677,12 +705,16 @@ export function application(
 
         if (method === "GET" && record[2] === "/history") {
           const r = s.get(
-            "SELECT visibility FROM records WHERE id=? AND project_id=?",
+            "SELECT visibility,kind,actor_id FROM records WHERE id=? AND project_id=?",
             recordId,
             project,
           );
           assert(
-            r && (!client || r.visibility === "client"),
+            r &&
+              (!client ||
+                (r.visibility === "client" &&
+                  (!["feedback", "support"].includes(r.kind) ||
+                    r.actor_id === user))),
             404,
             "Record not found.",
           );

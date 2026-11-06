@@ -317,7 +317,7 @@ function projectHeader() {
         ["ownership", "Handoff"],
         ["notes", "Notes"],
       ];
-  return `<header class="project-head"><div class="breadcrumb"><a href="/${route.surface}/projects">Projects</a> / ${e(p.name)}</div><div class="project-title"><img class="project-thumb" src="/assets/architecture.svg" alt=""><div><h1>${e(p.name)}</h1><p>${e(p.purpose)}</p></div>${badge(p.status)}</div><nav class="tabs" aria-label="Project sections">${tabs.map(([key, label]) => `<a href="${projectPath(p.id, key)}" class="${route.tab === key ? "active" : ""}" ${route.tab === key ? 'aria-current="page"' : ""}>${label}</a>`).join("")}</nav></header>`;
+  return `<header class="project-head"><div class="breadcrumb"><a href="/${route.surface}/projects">Projects</a> / ${e(p.name)}</div><div class="project-title"><img class="project-thumb" src="/assets/architecture.svg" alt=""><div><h1>${e(p.name)}</h1><p>${e(p.purpose)}</p></div>${badge(p.status)}</div><nav class="tabs" aria-label="Project sections" aria-describedby="project-tabs-hint" tabindex="0">${tabs.map(([key, label]) => `<a href="${projectPath(p.id, key)}" class="${route.tab === key ? "active" : ""}" ${route.tab === key ? 'aria-current="page"' : ""}>${label}</a>`).join("")}</nav><p id="project-tabs-hint" class="tabs-hint">Swipe or scroll sideways for more sections <span aria-hidden="true">→</span></p></header>`;
 }
 function inspectorPanel() {
   const p = room!.project;
@@ -595,6 +595,56 @@ function projectView() {
     `<div class="room-layout ${client || inspectorCollapsed || ["plan", "decisions", "proof", "code", "tests", "releases"].includes(tab) ? "inspector-hidden" : ""}"><section class="room-main">${main}</section>${client || ["plan", "decisions", "proof", "code", "tests", "releases"].includes(tab) ? "" : inspectorPanel()}</div>`
   );
 }
+function homeDecisionItems(focus: Data) {
+  if (route.surface === "space") {
+    const requests = focus.client_decisions ?? [];
+    return requests.length
+      ? requests
+          .map(
+            (r: Data) =>
+              `<p><a href="${projectPath(r.project_id)}">${e(r.title)} ${icon("arrow")}</a></p>`,
+          )
+          .join("")
+      : '<p class="muted">No current decision requests need your response.</p>';
+  }
+  return focus.decisions.length
+    ? focus.decisions
+        .map(
+          (r: Data) =>
+            `<p><a href="${projectPath(r.project_id)}#record-${e(r.id)}">${e(r.title)} ${icon("arrow")}</a></p>`,
+        )
+        .join("")
+    : '<p class="muted">No outstanding decision proposals.</p>';
+}
+function nextHomeAction(focus: Data) {
+  const client = route.surface === "space";
+  if (!projects.length)
+    return `<section class="card home-action" aria-label="Suggested next action"><p class="eyebrow">Your next step</p><h2>${client ? "Join your first project." : "Give your next project a home."}</h2><p class="muted">${client ? "Accept the invitation shared by your project team." : "Create a project to track its purpose, people and decisions."}</p>${client || !me!.founder ? button("Accept an invitation", "accept-invite") : button("Create a project", "new-project")}</section>`;
+  const requested = client ? (focus.client_decisions ?? [])[0] : null;
+  const task = !client ? focus.tasks[0] : null;
+  const decision = !client ? focus.decisions[0] : null;
+  const item = requested ?? task ?? decision;
+  const target = item?.project_id ?? projects[0]!.id;
+  const destination = requested
+    ? projectPath(target)
+    : task
+      ? projectPath(target, "plan")
+      : decision
+        ? projectPath(target)
+        : projectPath(target);
+  const title = requested
+    ? "A client decision needs your response."
+    : task
+      ? "Project work needs attention."
+      : decision
+        ? "A project decision needs review."
+        : "Open your most recent project.";
+  const description = item
+    ? e(item.title)
+    : "Continue where your project team left off.";
+  return `<section class="card home-action" aria-label="Suggested next action"><p class="eyebrow">Your next step</p><h2>${title}</h2><p class="muted">${description}</p><a class="button secondary" href="${destination}">${requested ? "Respond in Client Space" : task ? "Review project plan" : decision ? "Open project decision" : "Open project"} ${icon("arrow")}</a></section>`;
+}
+
 async function overview() {
   if (route.page === "settings") {
     const sessions = await api("/sessions");
@@ -646,7 +696,7 @@ async function overview() {
           ? button(`${icon("plus")} Create project`, "new-project", "")
           : button("Accept invitation", "accept-invite"),
       ) +
-      `<div class="page-body"><p class="eyebrow">Your focus today</p>${projectCards()}<div class="divider"></div><div class="grid"><section class="card"><h2>Awaiting a decision</h2>${focus.decisions.length ? focus.decisions.map((r: Data) => `<p><a href="${projectPath(r.project_id)}#record-${e(r.id)}">${e(r.title)} ${icon("arrow")}</a></p>`).join("") : '<p class="muted">No outstanding decision proposals.</p>'}</section><section class="card"><h2>Blockers & reviews</h2>${focus.tasks.length ? focus.tasks.map((r: Data) => `<p><a href="${projectPath(r.project_id, "plan")}">${badge(r.status)} ${e(r.title)}</a></p>`).join("") : '<p class="muted">No tasks are blocked or waiting for review.</p>'}</section>${route.surface === "studio" ? `<section class="card"><h2>Recent project activity</h2>${focus.activity.length ? focus.activity.map((r: Data) => `<div class="activity"><strong>${e(r.actor)}</strong> · ${e(r.action.replaceAll(".", " "))}<br><small>${date(r.created_at)}</small></div>`).join("") : '<p class="muted">Activity appears as you work.</p>'}</section>` : ""}</div><div class="divider"></div><p class="muted">Decisions, notes, and verified outcomes. No attendance tracking or productivity scores.</p></div>`
+      `<div class="page-body">${nextHomeAction(focus)}<p class="eyebrow">Your projects</p>${projectCards()}<div class="divider"></div><div class="grid"><section class="card"><h2>${route.surface === "space" ? "Your decision requests" : "Awaiting a decision"}</h2>${homeDecisionItems(focus)}</section><section class="card"><h2>Blockers & reviews</h2>${focus.tasks.length ? focus.tasks.map((r: Data) => `<p><a href="${projectPath(r.project_id, "plan")}">${badge(r.status)} ${e(r.title)}</a></p>`).join("") : '<p class="muted">No tasks are blocked or waiting for review.</p>'}</section>${route.surface === "studio" ? `<section class="card"><h2>Recent project activity</h2>${focus.activity.length ? focus.activity.map((r: Data) => `<div class="activity"><strong>${e(r.actor)}</strong> · ${e(r.action.replaceAll(".", " "))}<br><small>${date(r.created_at)}</small></div>`).join("") : '<p class="muted">Activity appears as you work.</p>'}</section>` : ""}</div><div class="divider"></div><p class="muted">Decisions, notes, and verified outcomes. No attendance tracking or productivity scores.</p></div>`
     );
   }
   const copy: Record<string, [string, string]> = {
@@ -684,6 +734,21 @@ async function overview() {
         : "",
     ) +
     `<div class="page-body">${route.page === "people" && route.project ? "" : projectCards().replaceAll("?tab=room", `?tab=${route.page === "workbench" ? "code" : route.page === "delivery" ? "releases" : "room"}`)}${route.page === "people" && projects.length ? `<div class="divider"></div>${projects.map((p) => button(`Manage ${e(p.name)}`, `people:${p.id}`)).join(" ")}` : ""}</div>`
+  );
+}
+function revealCurrentProjectSection() {
+  // A deep link to a later mobile tab must keep its active label visible.
+  // Adjust only the horizontal nav; never scroll the page past its heading.
+  const tabs = root.querySelector<HTMLElement>(".tabs");
+  const active = tabs?.querySelector<HTMLElement>('[aria-current="page"]');
+  if (!tabs || !active || tabs.scrollWidth <= tabs.clientWidth) return;
+  const nav = tabs.getBoundingClientRect();
+  const item = active.getBoundingClientRect();
+  const itemLeft = item.left - nav.left + tabs.scrollLeft;
+  const centered = itemLeft - (tabs.clientWidth - item.width) / 2;
+  tabs.scrollLeft = Math.max(
+    0,
+    Math.min(tabs.scrollWidth - tabs.clientWidth, centered),
   );
 }
 async function render() {
@@ -732,6 +797,7 @@ async function render() {
         );
       }
       root.innerHTML = shell(projectView());
+      revealCurrentProjectSection();
       if (target)
         document
           .getElementById("record-" + target)

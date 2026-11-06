@@ -63,13 +63,27 @@ function observe(page) {
   });
 }
 observe(page);
+async function settledApplication(p) {
+  // A fully rendered workspace must settle before a hard page replacement.
+  // Otherwise WebKit can reject the departing /api/home read as an unhandled
+  // page error. Never suppress or exclude browser errors from the final gate.
+  if (p.url().startsWith("http")) {
+    await p.waitForFunction(
+      () =>
+        document.querySelector("#app")?.getAttribute("aria-busy") !== "true",
+    );
+  }
+  await p.waitForLoadState("networkidle");
+}
 async function visit(p, url) {
-  // A hard document replacement can cancel the preceding screen's real reads.
-  // WebKit reports some such cancellations as page errors. Exercise completed
-  // task boundaries in every engine; never filter errors to make a test pass.
-  await p.waitForLoadState("networkidle");
+  await settledApplication(p);
   await p.goto(url);
-  await p.waitForLoadState("networkidle");
+  await settledApplication(p);
+}
+async function settledReload(p) {
+  await settledApplication(p);
+  await p.reload();
+  await settledApplication(p);
 }
 async function signIn(p, email, path = "/studio") {
   await visit(p, config.origin + path);
@@ -209,6 +223,10 @@ try {
     .getByRole("heading", { name: "Your inquiry is recorded." })
     .waitFor();
   await signIn(page, founder.email);
+  await page
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("heading", { name: "Give your next project a home." })
+    .waitFor();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("link", { name: "Pipeline", exact: true }).click();
   await page
@@ -233,6 +251,14 @@ try {
     .getByRole("heading", { name: "Mizvo verification project" })
     .waitFor();
   const project = page.url().match(/projects\/([^?]+)/)[1];
+  await visit(page, config.origin + "/studio");
+  await page
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("heading", { name: "Open your most recent project." })
+    .waitFor();
+  await capture(page, "studio-home-action", 390);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await visit(page, config.origin + `/studio/projects/${project}`);
   await page.getByRole("link", { name: "Handoff", exact: true }).click();
   await page.getByRole("button", { name: "Prepare an ownership plan" }).click();
   await page
@@ -297,7 +323,19 @@ try {
     await page.locator(".record.decision .tag").textContent(),
     "proposed",
   );
-  await page.reload();
+  await visit(page, config.origin + "/studio");
+  await page
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("heading", { name: "A project decision needs review." })
+    .waitFor();
+  await page
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("link", { name: /Open project decision/ })
+    .click();
+  await page
+    .getByRole("heading", { name: "Keep decisions explicit" })
+    .waitFor();
+  await settledReload(page);
   await page
     .getByRole("heading", { name: "Architecture context, revised" })
     .waitFor();
@@ -509,6 +547,70 @@ try {
 
   for (const w of [320, 390, 768, 1024, 1440, 1920])
     await capture(client, "client-space", w);
+  // On narrow phones, later sections are otherwise off-screen. Their
+  // scroll affordance and the active section must remain discoverable.
+  await client.setViewportSize({ width: 320, height: 1000 });
+  await visit(client, config.origin + `/space/projects/${project}?tab=support`);
+  for (const [tab, label] of [
+    ["support", "Support"],
+    ["ownership", "Ownership"],
+    ["releases", "Reviews & files"],
+  ]) {
+    const sections = client.getByRole("navigation", {
+      name: "Project sections",
+    });
+    if (tab !== "support") {
+      await sections.getByRole("link", { name: label, exact: true }).click();
+    }
+    await client.waitForFunction(
+      (current) =>
+        document
+          .querySelector('.tabs a[aria-current="page"]')
+          ?.textContent?.trim() === current,
+      label,
+    );
+    const active = sections.locator('[aria-current="page"]');
+    const visible = await active.evaluate((item) => {
+      const bounds = item.getBoundingClientRect();
+      const nav = item.closest("nav").getBoundingClientRect();
+      return {
+        title: item.textContent.trim(),
+        within: bounds.left >= nav.left - 1 && bounds.right <= nav.right + 1,
+        overflow: item.closest("nav").scrollWidth > nav.width,
+        horizontallySafe:
+          document.documentElement.scrollWidth <= window.innerWidth + 1,
+      };
+    });
+    assert.equal(visible.title, label);
+    assert.equal(visible.within, true, `Selected ${tab} tab must be visible.`);
+    assert.equal(visible.overflow, true);
+    assert.equal(visible.horizontallySafe, true);
+    assert.equal(
+      await client
+        .getByText("Swipe or scroll sideways for more sections")
+        .isVisible(),
+      true,
+    );
+  }
+  await capture(client, "client-mobile-tabs-deeplink", 320);
+  await client.setViewportSize({ width: 1440, height: 1000 });
+  await client
+    .getByRole("navigation", { name: "Project sections" })
+    .getByRole("link", { name: "Overview", exact: true })
+    .click();
+  await client.waitForFunction(
+    () =>
+      document
+        .querySelector('.tabs a[aria-current="page"]')
+        ?.textContent?.trim() === "Overview",
+  );
+  assert.equal(
+    await client
+      .getByText("Swipe or scroll sideways for more sections")
+      .isVisible(),
+    false,
+  );
+  await client.setViewportSize({ width: 390, height: 1000 });
   await client.getByRole("link", { name: "Feedback", exact: true }).click();
   await client.locator("#record-title").fill("Client feedback");
   await client
@@ -628,7 +730,20 @@ try {
     .getByRole("heading", { name: "Approve the onboarding description" })
     .waitFor();
   await capture(client, "client-decisions", 390);
-  await visit(client, config.origin + `/space/projects/${project}`);
+  await visit(client, config.origin + "/space");
+  await client
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("heading", { name: "A client decision needs your response." })
+    .waitFor();
+  await client
+    .getByRole("region", { name: "Suggested next action" })
+    .getByText("Approve the onboarding description")
+    .waitFor();
+  await capture(client, "client-home-action", 390);
+  await client
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("link", { name: /Respond in Client Space/ })
+    .click();
   await client.getByText("One decision needs your input").waitFor();
   await client.getByText("Recorded version: Verification version 1").waitFor();
   await capture(client, "client-next-decision", 390);
@@ -681,7 +796,7 @@ try {
     { revoke: true },
   );
   assert.equal(revoke.status, 200);
-  await engineer.reload();
+  await settledReload(engineer);
   await engineer.getByRole("alert").waitFor();
   assert.match(
     await engineer.getByRole("alert").textContent(),
@@ -799,7 +914,7 @@ try {
       exact: true,
     })
     .waitFor();
-  await page.reload();
+  await settledReload(page);
   await page
     .getByRole("heading", {
       name: "Older note edited through deep link",

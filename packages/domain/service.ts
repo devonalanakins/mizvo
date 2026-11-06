@@ -38,12 +38,58 @@ export class Domain {
       object,
       now(),
     );
-    if (project)
+    if (project) {
+      // Generic "Project updated" alerts reveal event timing. Default to
+      // internal teammates only; a client receives alerts exclusively for
+      // shared project work or private actions addressed to that client.
+      const record = this.s.get(
+        "SELECT visibility,kind,actor_id FROM records WHERE id=? AND project_id=?",
+        object,
+        project,
+      );
+      let clientAudience: "team" | "shared" | "recipient" = "team";
+      let recipient: string | null = null;
+      if (record) {
+        if (record.kind === "feedback" || record.kind === "support") {
+          clientAudience = "recipient";
+          recipient = record.actor_id;
+        } else if (record.visibility === "client") clientAudience = "shared";
+      } else if (action.startsWith("client_decision.")) {
+        clientAudience = "recipient";
+        recipient =
+          this.s.get(
+            "SELECT client_id FROM client_decision_requests WHERE id=? AND project_id=?",
+            object,
+            project,
+          )?.client_id ?? null;
+      } else if (action === "project.status_changed") {
+        clientAudience = "shared";
+      } else {
+        const sharedSource =
+          action === "brief.revised"
+            ? "SELECT visibility FROM project_brief_revisions WHERE id=? AND project_id=?"
+            : action === "ownership.plan_revised"
+              ? "SELECT visibility FROM project_ownership_revisions WHERE id=? AND project_id=?"
+              : action.startsWith("task.")
+                ? "SELECT visibility FROM tasks WHERE id=? AND project_id=?"
+                : action.startsWith("milestone.")
+                  ? "SELECT visibility FROM project_milestones WHERE id=? AND project_id=?"
+                  : action === "release.recorded"
+                    ? "SELECT visibility FROM releases WHERE id=? AND project_id=?"
+                    : null;
+        if (
+          sharedSource &&
+          this.s.get(sharedSource, object, project)?.visibility === "client"
+        )
+          clientAudience = "shared";
+      }
       for (const m of this.s.all(
-        `SELECT m.user_id FROM memberships m LEFT JOIN preferences p ON p.user_id=m.user_id WHERE m.project_id=? AND m.user_id<>? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND COALESCE(p.activity,1)=1`,
+        `SELECT m.user_id FROM memberships m LEFT JOIN preferences p ON p.user_id=m.user_id WHERE m.project_id=? AND m.user_id<>? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND COALESCE(p.activity,1)=1 AND (m.role<>'client' OR ?=1 OR m.user_id=?)`,
         project,
         actor,
         now(),
+        Number(clientAudience === "shared"),
+        clientAudience === "recipient" ? recipient : null,
       )) {
         this.s.run(
           "INSERT INTO notifications VALUES (?,?,?,?,?,NULL)",
@@ -54,10 +100,16 @@ export class Domain {
           now(),
         );
       }
+    }
   }
   projects(user: string, clients = false) {
+    // Client Space uses an explicit public project projection, consistent
+    // with room(): never expose owner_id or organization_id via the list.
+    const fields = clients
+      ? "p.id,p.name,p.purpose,p.scope,p.status,p.updated_at,m.role"
+      : "p.*,m.role";
     return this.s.all(
-      `SELECT p.*,m.role FROM projects p JOIN memberships m ON m.project_id=p.id WHERE m.user_id=? AND p.organization_id=? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) ${clients ? "AND m.role='client'" : "AND m.role<>'client'"} ORDER BY p.updated_at DESC`,
+      `SELECT ${fields} FROM projects p JOIN memberships m ON m.project_id=p.id WHERE m.user_id=? AND p.organization_id=? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) ${clients ? "AND m.role='client'" : "AND m.role<>'client'"} ORDER BY p.updated_at DESC`,
       user,
       this.organization,
       now(),
@@ -128,6 +180,12 @@ export class Domain {
     );
     const values: any[] = [project];
     let where = client ? " AND r.visibility='client'" : "";
+    // Shared client-visible updates are available to all invited clients.
+    // Feedback and support are private conversations with the project team.
+    if (client) {
+      where += " AND (r.kind NOT IN ('feedback','support') OR r.actor_id=?)";
+      values.push(user);
+    }
     if (kind === "shared")
       where +=
         " AND r.visibility='client' AND r.kind NOT IN ('feedback','support')";
@@ -839,7 +897,11 @@ export class Domain {
       project,
     );
     assert(
-      r && (m.role !== "client" || r.visibility === "client"),
+      r &&
+        (m.role !== "client" ||
+          (r.visibility === "client" &&
+            (!["feedback", "support"].includes(r.kind) ||
+              r.actor_id === user))),
       404,
       "Record not found.",
     );
@@ -897,7 +959,9 @@ export class Domain {
         project,
       );
     assert(
-      r && (m.role !== "client" || r.visibility === "client"),
+      r &&
+        (m.role !== "client" ||
+          (r.visibility === "client" && r.actor_id === user)),
       404,
       "Support request not found.",
     );

@@ -690,6 +690,21 @@ pre {
   margin-top: 24px;
   padding-bottom: 0;
   scrollbar-width: thin;
+  scrollbar-color: #a57e61 transparent;
+}
+.tabs:focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: -2px;
+}
+.tabs::-webkit-scrollbar {
+  height: 5px;
+}
+.tabs::-webkit-scrollbar-thumb {
+  background: #a57e61;
+  border-radius: 5px;
+}
+.tabs-hint {
+  display: none;
 }
 .tabs a {
   padding: 12px 3px 14px;
@@ -1136,6 +1151,15 @@ pre {
   .tabs {
     gap: 20px;
   }
+  .tabs-hint {
+    display: block;
+    margin: 0;
+    padding: 6px 0 10px;
+    font-size: 11px;
+    color: #ddd7d2;
+    text-align: right;
+    letter-spacing: 0.02em;
+  }
   .public-header {
     height: 80px;
     padding: 0 6%;
@@ -1525,6 +1549,41 @@ pre {
   border-top: 1px solid #5b5147;
   padding-top: 16px;
 }
+/* One actual next action, never simulated productivity progress. */
+.home-action {
+  margin-bottom: 26px;
+  border-color: #78614b;
+  background: linear-gradient(120deg, #2b241e, #1a1d23 68%);
+}
+.home-action .eyebrow {
+  color: var(--copper);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.home-action h2 {
+  font:
+    400 clamp(27px, 3vw, 38px) / 1.16 Editorial,
+    Georgia,
+    serif;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+.home-action .muted {
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+}
+.home-action .button {
+  margin-top: 6px;
+}
+@media (max-width: 550px) {
+  .home-action {
+    padding: 20px 16px;
+  }
+  .home-action .button {
+    width: 100%;
+  }
+}
+
 .decision-focus {
   margin-bottom: 22px;
   border-color: #866546;
