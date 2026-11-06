@@ -1,0 +1,27 @@
+name: Temporary mobile-tabs formatting evidence
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - run: npx prettier --write tests/browser.mjs
+      - run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const data=fs.readFileSync("tests/browser.mjs", "utf8");
+            const a=data.indexOf("  // On narrow phones");
+            const b=data.indexOf("  await client.getByRole(\"link\", { name: \"Feedback\"", a);
+            if (a<0 || b<=a) process.exit(1);
+            console.log("MIZVO_TABS_START");
+            process.stdout.write(data.slice(a,b));
+            console.log("MIZVO_TABS_END");
+          '
