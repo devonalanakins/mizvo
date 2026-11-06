@@ -351,7 +351,10 @@ test("V0.24 offline restore recovers a copied encrypted archive without reactiva
         recovered.prepare("PRAGMA integrity_check").get()?.integrity_check,
         "ok",
       );
-      assert.equal(recovered.prepare("PRAGMA foreign_key_check").all().length, 0);
+      assert.equal(
+        recovered.prepare("PRAGMA foreign_key_check").all().length,
+        0,
+      );
       assert.equal(
         recovered.prepare("SELECT COUNT(*) AS count FROM users").get()?.count,
         1,
@@ -370,12 +373,10 @@ test("V0.24 offline restore recovers a copied encrypted archive without reactiva
           .get()?.count,
         1,
       );
-      assert.equal(
-        recovered.prepare(
-          "SELECT name FROM organizations WHERE id=?",
-        ).get("fictional-org")?.name,
-        "Fictional Organization",
-      );
+      const organizationName = recovered
+        .prepare("SELECT name FROM organizations WHERE id=?")
+        .get("fictional-org")?.name;
+      assert.equal(organizationName, "Fictional Organization");
     } finally {
       recovered.close();
     }
@@ -503,10 +504,7 @@ test("V0.24 offline restore rejects bad keys, corruption, existing targets and s
     ]);
     assert.notEqual(sidecar.status, 0);
     assert.equal(existsSync(target), false);
-    assert.equal(
-      readFileSync(target + "-wal", "utf8"),
-      "preexisting sidecar",
-    );
+    assert.equal(readFileSync(target + "-wal", "utf8"), "preexisting sidecar");
     assert.deepEqual(readdirSync(f.recoveryDir), ["restored.sqlite-wal"]);
     assert.equal(hash(f.archive), sourceHash);
   } finally {
