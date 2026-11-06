@@ -14,6 +14,7 @@ Node 24.22.1 serves all three web surfaces and the HTTP API on loopback, with SQ
 | `MIZVO_GITHUB_REPOSITORIES` | empty | Comma-separated exact owner/repository allowlist |
 | `MIZVO_GITHUB_TOKEN` | unset | Optional externally managed, read-only GitHub credential |
 | `MIZVO_ACCOUNT_PASSWORD` | required only by account CLI | Provisioning password; unset immediately afterward |
+| `MIZVO_EXPECTED_SERVER_SHA256` | unset (optional) | Exact lowercase 64-character SHA-256 of the reviewed compiled `dist/apps/api/server.js`; standalone startup refuses a malformed/mismatched value before opening SQLite |
 
 There is no automatic `.env` loader. Inject environment values through the process manager or your local shell. Secret values must not enter Git, application logs, public files or documentation.
 
@@ -37,6 +38,12 @@ Use a dedicated non-root OS account. Keep the database directory mode 0700; back
 `GET /api/health` is an unauthenticated liveness signal indicating the process is serving HTTP; its `status: ok` is **not proof** the SQLite database or any application workflow is operational. Use unauthenticated `GET /api/ready` for host startup/readiness gates. It performs bounded read-only checks for the configured organization, migration/checksum correspondence, and essential account, project, membership, invitation, task, release, decision, notification and write-rate-limit tables. It returns `200 {"status":"ready"}` on success or `503 {"status":"unavailable"}` if checks fail, without returning record content, SQL errors or schema details. The probe does not write data and cannot prove disk writeability, external integrations, recovery objectives, security approvals or deployed release identity. Do not use the public result as an authorization or production-acceptance signal; confirm authenticated journeys and independent backup restoration separately.
 
 The local synthetic staging, HTTPS proxy and container health-check rehearsals require this readiness result before exercising accounts. Operations should treat repeated 503 results as a private investigation/rollback trigger and retain the existing process liveness signal for diagnosis; never clear or replace a production database merely because readiness fails.
+
+## Runtime entrypoint identity
+
+`GET /api/health` includes `server_sha256`, calculated once when the running server module is loaded. For an installed distribution, compare this field to the `apps/api/server.js` entry in the independently trusted `build-proof.json` file inventory, after validating the complete manifest and file set with the [installation preflight](INSTALLATION-PREFLIGHT.md). The operator can optionally supply that trusted file digest in `MIZVO_EXPECTED_SERVER_SHA256` through a protected process-manager environment; malformed or different values abort standalone Node startup before initializing the database. The synthetic HTTPS, restore and OCI tests exercise this comparison, including a negative mismatched-start case.
+
+This field fingerprints only the entrypoint bytes **loaded at process start**, not all assets, other compiled modules, active memory, the machine, or a remote deployment. A compromised application can lie about its own value; a matching hash alone is not a signature or trusted production attestation. Keep the full installation proof, protected immutable release directory, external host identity, TLS, real access testing and off-host recovery gates. Never derive the expected digest solely from the same untrusted download being checked. An unset expected digest leaves startup unpinned for compatibility with existing local review installations.
 
 ## GitHub
 

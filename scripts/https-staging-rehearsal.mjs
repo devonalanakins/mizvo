@@ -278,6 +278,7 @@ async function main() {
       PORT: String(port),
       MIZVO_ORIGIN: origin,
       MIZVO_DATABASE: database,
+      MIZVO_EXPECTED_SERVER_SHA256: artifact,
       MIZVO_ORGANIZATION: "tls-synthetic",
       MIZVO_GITHUB_REPOSITORIES: "",
       MIZVO_PREVIEW_URLS: "",
@@ -328,6 +329,7 @@ async function main() {
       /default-src 'self'/,
     );
     assert.equal(health.value.storage, "sqlite");
+    assert.equal(health.value.server_sha256, artifact);
     const ready = await secureRequest(tlsPort, identity.cert, "/api/ready");
     assert.equal(ready.status, 200);
     assert.deepEqual(ready.value, { status: "ready" });

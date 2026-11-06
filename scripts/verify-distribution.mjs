@@ -1,4 +1,5 @@
-import { mkdtemp, cp, rm } from "node:fs/promises";
+import { mkdtemp, cp, rm, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -32,6 +33,13 @@ try {
   await once(app.server, "listening");
   config.origin = "http://localhost:" + app.server.address().port;
   try {
+    const health = await fetch(config.origin + "/api/health");
+    assert.equal(health.status, 200);
+    const served = await health.json();
+    const expectedServerSha = createHash("sha256")
+      .update(await readFile(join(temporary, "dist/apps/api/server.js")))
+      .digest("hex");
+    assert.equal(served.server_sha256, expectedServerSha);
     const site = await fetch(config.origin);
     assert.equal(site.status, 200);
     assert.match(await site.text(), /Mizvo/);

@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import { request as httpRequest } from "node:http";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
@@ -107,6 +108,10 @@ test("health reports process liveness while readiness rejects missing database m
     const live = await f.request("/health");
     assert.equal(live.status, 200);
     assert.equal(live.value.status, "ok");
+    const sourceDigest = createHash("sha256")
+      .update(readFileSync(new URL("../apps/api/server.ts", import.meta.url)))
+      .digest("hex");
+    assert.equal(live.value.server_sha256, sourceDigest);
 
     const ready = await f.request("/ready");
     assert.equal(ready.status, 200);

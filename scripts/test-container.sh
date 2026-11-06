@@ -81,6 +81,7 @@ if node scripts/installation-preflight.mjs \
   exit 1
 fi
 rm "$receipt_dir/extracted/injected.txt"
+expected_server_sha="$(sha256sum "$receipt_dir/extracted/apps/api/server.js" | cut -d " " -f 1)"
 
 # A local Docker image ID is content-addressed, but not a remote registry
 # digest or proof of what an external service is actually running.
@@ -134,6 +135,9 @@ expect_rejected_start "Container network binding requires production HTTPS origi
   -e NODE_ENV=test -e MIZVO_ORIGIN=http://localhost:4173
 expect_rejected_start "Unsupported bind address." \
   -e MIZVO_ORIGIN=https://staging.example.invalid -e MIZVO_BIND_HOST=192.0.2.1
+expect_rejected_start "Runtime server fingerprint differs from approved digest." \
+  -e MIZVO_ORIGIN=https://staging.example.invalid \
+  -e MIZVO_EXPECTED_SERVER_SHA256="$(printf '0%.0s' {1..64})"
 
 docker volume create "$volume" >/dev/null
 
@@ -149,6 +153,7 @@ start_container() {
     --mount "type=volume,source=$volume,target=/var/lib/mizvo" \
     -e MIZVO_ORIGIN=https://staging.example.invalid \
     -e MIZVO_ORGANIZATION=mizvo-synthetic-stage \
+    -e MIZVO_EXPECTED_SERVER_SHA256="$expected_server_sha" \
     -p 127.0.0.1::4173 \
     "$image" >/dev/null
 }
@@ -165,6 +170,12 @@ wait_until_healthy() {
     if curl --silent --fail --max-time 2 \
         "http://127.0.0.1:$port/api/ready" \
         | grep -q '"status":"ready"'; then
+      local live
+      live="$(curl --silent --fail --max-time 2 "http://127.0.0.1:$port/api/health")"
+      [[ "$live" == *"\"server_sha256\":\"$expected_server_sha\""* ]] || {
+        echo "FAIL: live container server fingerprint differs from verified image" >&2
+        exit 1
+      }
       return
     fi
     sleep 1
