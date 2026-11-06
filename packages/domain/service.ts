@@ -15,6 +15,35 @@ import {
   founder,
   version,
 } from "../authz/security.ts";
+// Client responses intentionally expose only UI-required record fields. Do not
+// serialize the underlying actor/project IDs or future database columns.
+export function clientRecordProjection(record: Row, viewer: string): Row {
+  return {
+    id: record.id,
+    kind: record.kind,
+    title: record.title,
+    body: record.body,
+    state: record.state,
+    version: record.version,
+    actor: record.actor,
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+    can_edit: record.actor_id === viewer,
+  };
+}
+
+// Version history is visible only after the record-level access check.
+export function clientHistoryProjection(entry: Row): Row {
+  return {
+    version: entry.version,
+    title: entry.title,
+    body: entry.body,
+    state: entry.state,
+    actor: entry.actor,
+    created_at: entry.created_at,
+  };
+}
+
 export class Domain {
   s: Store;
   organization: string;
@@ -232,7 +261,9 @@ export class Domain {
       records = newest.slice(0, limit).reverse(),
       oldest = records[0];
     return {
-      records,
+      records: client
+        ? records.map((record) => clientRecordProjection(record, user))
+        : records,
       record_page: {
         has_more: more,
         next_cursor:
