@@ -7,7 +7,11 @@ import { readFile } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Store, type Row } from "../../packages/storage/database.ts";
-import { Domain } from "../../packages/domain/service.ts";
+import {
+  Domain,
+  clientRecordProjection,
+  clientHistoryProjection,
+} from "../../packages/domain/service.ts";
 import { GitHub } from "./github.ts";
 import { PreviewProbe } from "./preview.ts";
 import {
@@ -699,7 +703,7 @@ export function application(
             404,
             "Record not found.",
           );
-          send(res, 200, r);
+          send(res, 200, client ? clientRecordProjection(r, user) : r);
           return;
         }
 
@@ -721,10 +725,13 @@ export function application(
           send(
             res,
             200,
-            s.all(
-              "SELECT h.*,u.name AS actor FROM record_history h JOIN users u ON u.id=h.actor_id WHERE record_id=? ORDER BY version",
-              recordId,
-            ),
+            (() => {
+              const entries = s.all(
+                "SELECT h.*,u.name AS actor FROM record_history h JOIN users u ON u.id=h.actor_id WHERE record_id=? ORDER BY version",
+                recordId,
+              );
+              return client ? entries.map(clientHistoryProjection) : entries;
+            })(),
           );
           return;
         }
