@@ -39,6 +39,12 @@ Use a dedicated non-root OS account. Keep the database directory mode 0700; back
 
 The local synthetic staging, HTTPS proxy and container health-check rehearsals require this readiness result before exercising accounts. Operations should treat repeated 503 results as a private investigation/rollback trigger and retain the existing process liveness signal for diagnosis; never clear or replace a production database merely because readiness fails.
 
+## Runtime entrypoint identity
+
+`GET /api/health` includes `server_sha256`, calculated once when the running server module is loaded. For an installed distribution, compare this field to the `apps/api/server.js` entry in the independently trusted `build-proof.json` file inventory, after validating the complete manifest and file set with the [installation preflight](INSTALLATION-PREFLIGHT.md). The operator can optionally supply that trusted file digest in `MIZVO_EXPECTED_SERVER_SHA256` through a protected process-manager environment; malformed or different values abort standalone Node startup before initializing the database. The synthetic HTTPS, restore and OCI tests exercise this comparison, including a negative mismatched-start case.
+
+This field fingerprints only the entrypoint bytes **loaded at process start**, not all assets, other compiled modules, active memory, the machine, or a remote deployment. A compromised application can lie about its own value; a matching hash alone is not a signature or trusted production attestation. Keep the full installation proof, protected immutable release directory, external host identity, TLS, real access testing and off-host recovery gates. Never derive the expected digest solely from the same untrusted download being checked. An unset expected digest leaves startup unpinned for compatibility with existing local review installations.
+
 ## GitHub
 
 The server administrator first allowlists an exact repository. The project owner/founder then explicitly associates it with a project. Internal members may read branches, commits, pull requests, source, exact-commit check runs and comparisons. Clients cannot use these endpoints. No shell, runner, arbitrary server fetch URL, write token, deployment token or automatic code execution is provided.
