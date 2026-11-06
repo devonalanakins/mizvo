@@ -81,7 +81,10 @@ test("standalone startup rejects unsafe production configuration before creating
     ];
     for (const scenario of cases) {
       const env = { ...valid, ...scenario.overrides };
-      if (scenario.overrides.MIZVO_DATABASE === undefined)
+      if (
+        Object.hasOwn(scenario.overrides, "MIZVO_DATABASE") &&
+        scenario.overrides.MIZVO_DATABASE === undefined
+      )
         delete env.MIZVO_DATABASE;
       const result = spawnSync(
         process.execPath,
