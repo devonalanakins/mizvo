@@ -337,6 +337,24 @@ export function application(
               ...ids,
             )
           : [];
+        // Only decisions addressed to this signed-in client, in projects with
+        // current active access and linked to the latest shared brief.
+        // Do not surface stale, cancelled, answered, or other-client requests.
+        const client_decisions =
+          client && ids.length
+            ? s.all(
+                `SELECT d.id,d.project_id,d.title FROM client_decision_requests d
+                 WHERE d.project_id IN (${placeholders}) AND d.client_id=? AND d.status='pending'
+                   AND (d.brief_revision_id IS NULL OR d.brief_revision_id=(
+                     SELECT br.id FROM project_brief_revisions br
+                     WHERE br.project_id=d.project_id AND br.visibility='client'
+                     ORDER BY br.revision DESC LIMIT 1
+                   ))
+                 ORDER BY d.created_at,d.id LIMIT 10`,
+                ...ids,
+                user,
+              )
+            : [];
         const activity =
           !client && ids.length
             ? s.all(
@@ -344,7 +362,12 @@ export function application(
                 ...ids,
               )
             : [];
-        send(res, 200, { decisions: pending, tasks, activity });
+        send(res, 200, {
+          decisions: client ? [] : pending,
+          client_decisions,
+          tasks,
+          activity,
+        });
         return;
       }
       if (path === "/api/me" && method === "GET") {
