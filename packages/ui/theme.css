@@ -1537,7 +1537,10 @@ pre {
   text-transform: uppercase;
 }
 .home-action h2 {
-  font: 400 clamp(27px, 3vw, 38px) / 1.16 Editorial, Georgia, serif;
+  font:
+    400 clamp(27px, 3vw, 38px) / 1.16 Editorial,
+    Georgia,
+    serif;
   margin-bottom: 12px;
   overflow-wrap: anywhere;
 }
