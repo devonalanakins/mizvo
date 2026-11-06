@@ -1741,6 +1741,187 @@ test("password verification preserves whitespace and uses explicit recorded work
   assert.equal(await verifyPassword(value, hash), true);
   assert.equal(await verifyPassword(value.trim(), hash), false);
 });
+test("client feedback and support stay private between invited clients on one project", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const first = await f.login(f.users.client.email);
+    const second = await f.login(f.users.other.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        { name: "Private client conversations", purpose: "Test two invited client identities." },
+        founder,
+      )
+    ).value.id;
+    const path = `/projects/${project}`;
+    for (const [person, session] of [
+      [f.users.client, first],
+      [f.users.other, second],
+    ] as const) {
+      const invite = await f.request(
+        path + "/invitations",
+        "POST",
+        { email: person.email, role: "client" },
+        founder,
+      );
+      assert.equal(invite.status, 201);
+      const accepted = await f.request(
+        "/invitations/accept",
+        "POST",
+        { token: invite.value.token },
+        session,
+      );
+      assert.equal(accepted.status, 200);
+    }
+    const firstFeedback = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "feedback",
+        title: "FIRST_CLIENT_FEEDBACK_SECRET",
+        body: "PRIVATE_ALPHA_SENTENCE",
+      },
+      first,
+    );
+    assert.equal(firstFeedback.status, 201);
+    const firstSupport = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "support",
+        title: "FIRST_CLIENT_SUPPORT_SECRET",
+        body: "PRIVATE_FIRST_SUPPORT_DETAILS",
+      },
+      first,
+    );
+    assert.equal(firstSupport.status, 201);
+    const secondFeedback = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "feedback",
+        title: "SECOND_CLIENT_FEEDBACK_SECRET",
+        body: "PRIVATE_BETA_SENTENCE",
+      },
+      second,
+    );
+    assert.equal(secondFeedback.status, 201);
+    const shared = await f.request(
+      path + "/records",
+      "POST",
+      {
+        kind: "note",
+        title: "SHARED_PROJECT_UPDATE",
+        body: "Nonprivate shared news.",
+        visibility: "client",
+      },
+      founder,
+    );
+    assert.equal(shared.status, 201);
+    for (const [session, own, other, ownSecret, otherSecret] of [
+      [first, [firstFeedback.value.id, firstSupport.value.id], [secondFeedback.value.id], "FIRST_CLIENT_FEEDBACK_SECRET", "SECOND_CLIENT_FEEDBACK_SECRET"],
+      [second, [secondFeedback.value.id], [firstFeedback.value.id, firstSupport.value.id], "SECOND_CLIENT_FEEDBACK_SECRET", "FIRST_CLIENT_FEEDBACK_SECRET"],
+    ] as const) {
+      const room = await f.request("/space" + path, "GET", undefined, session);
+      assert.equal(room.status, 200);
+      const roomIds = room.value.records.map((r: any) => r.id);
+      for (const id of own) assert(roomIds.includes(id));
+      for (const id of other) assert(!roomIds.includes(id));
+      assert(roomIds.includes(shared.value.id));
+      const roomJSON = JSON.stringify(room.value);
+      assert(roomJSON.includes(ownSecret));
+      assert(!roomJSON.includes(otherSecret));
+      assert(!roomJSON.includes(session === second ? "PRIVATE_FIRST_SUPPORT_DETAILS" : "PRIVATE_BETA_SENTENCE"));
+      for (const filter of ["feedback", "support"]) {
+        const result = await f.request(
+          "/space" + path + "/records?kind=" + filter,
+          "GET",
+          undefined,
+          session,
+        );
+        assert.equal(result.status, 200);
+        for (const r of result.value.records) {
+          assert(own.includes(r.id), "Other-client record appeared in paginated " + filter);
+        }
+      }
+      for (const id of other) {
+        assert.equal(
+          (await f.request("/space" + path + "/records/" + id, "GET", undefined, session)).status,
+          404,
+        );
+        assert.equal(
+          (await f.request("/space" + path + "/records/" + id + "/history", "GET", undefined, session)).status,
+          404,
+        );
+        assert.equal(
+          (await f.request("/space" + path + "/records/" + id, "PATCH", {
+            version: 1,
+            title: "Unauthorized update",
+            body: "Unauthorized",
+          }, session)).status,
+          404,
+        );
+      }
+      const ownDirect = await f.request(
+        "/space" + path + "/records/" + own[0],
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(ownDirect.status, 200);
+      assert.equal(ownDirect.value.id, own[0]);
+      const searchOther = await f.request(
+        "/search?q=" + otherSecret,
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(searchOther.status, 200);
+      assert.equal(searchOther.value.length, 0);
+      const searchOwn = await f.request(
+        "/search?q=" + ownSecret,
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(searchOwn.status, 200);
+      assert.equal(searchOwn.value.length, 1);
+      assert.equal(searchOwn.value[0].id, own[0]);
+      const searchShared = await f.request(
+        "/search?q=SHARED_PROJECT_UPDATE",
+        "GET",
+        undefined,
+        session,
+      );
+      assert.equal(searchShared.status, 200);
+      assert(searchShared.value.some((record: any) => record.id === shared.value.id));
+    }
+    assert.equal(
+      (await f.request(
+        "/space" + path + "/records/" + firstSupport.value.id + "/status",
+        "POST",
+        { state: "open", version: 1 },
+        second,
+      )).status,
+      404,
+    );
+    const team = await f.request(path, "GET", undefined, founder);
+    assert.equal(team.status, 200);
+    const teamIds = team.value.records.map((r: any) => r.id);
+    for (const id of [firstFeedback.value.id, firstSupport.value.id, secondFeedback.value.id, shared.value.id]) {
+      assert(teamIds.includes(id), "Project owner lost a project record");
+    }
+    assert.equal(
+      (await f.request(path + "/records/" + firstSupport.value.id + "/history", "GET", undefined, founder)).status,
+      200,
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
 test("client support requests have attributable team resolution and client reopening with version protection", async () => {
   const f = await fixture();
   try {
