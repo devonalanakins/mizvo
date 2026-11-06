@@ -17,7 +17,7 @@ Run clean `npm ci`, lint, typecheck, integration tests, build and browser checks
 
 Create a database backup before upgrading. Deploy into a versioned release directory with a process manager and a durable database path outside it. Set production environment variables described in SELF-HOSTING. Keep the prior reviewed release available. No automatic schema downgrade is attempted.
 
-Post-release checks must use the intended HTTPS endpoint and two independently authenticated authorized accounts: create/read/edit/reload, invitation acceptance, wrong-project/client denies, revocation of an active grant, public inquiry visibility, client feedback and version review, source evidence and relevant notifications. Confirm `/api/health`, build mapping, secure cookies, logs and storage after process restart. Only then label that exact version LIVE.
+Post-release checks must use the intended HTTPS endpoint and two independently authenticated authorized accounts: create/read/edit/reload, invitation acceptance, wrong-project/client denies, revocation of an active grant, public inquiry visibility, client feedback and version review, source evidence and relevant notifications. Confirm `/api/health` (process liveness) and `/api/ready` (storage readiness), build mapping, secure cookies, logs and storage after process restart. Neither probe replaces the authenticated negative-access and recovery checks. Only then label that exact version LIVE.
 
 ## V0.17 task migration safety
 
