@@ -73,7 +73,23 @@ function readKey(path: string): Buffer {
     throw new Error("Key must be owner-only (mode 0600).");
   if (process.getuid && entry.uid !== process.getuid())
     throw new Error("Key must be owned by the current user.");
-  return readFileSync(path);
+  const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.dev !== entry.dev ||
+        opened.ino !== entry.ino || opened.size !== 32 ||
+        (opened.mode & 0o077) !== 0 ||
+        (process.getuid && opened.uid !== process.getuid()))
+      throw new Error("Key changed or became accessible during opening.");
+    const key = Buffer.alloc(32);
+    if (readSync(fd, key, 0, key.length, 0) !== key.length)
+      throw new Error("Key contents are incomplete.");
+    if (key.every((value) => value === key[0]))
+      throw new Error("Refusing a trivially predictable encryption key.");
+    return key;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function writeAll(fd: number, bytes: Buffer) {
@@ -256,6 +272,7 @@ function checkArchive(archive: string, key: Buffer, directory: string) {
 }
 
 function seal(snapshot: string, archive: string, key: Buffer) {
+  privateDirectory(dirname(snapshot), "Snapshot directory");
   privateDirectory(dirname(archive), "Archive directory");
   const before = fileSha256(snapshot);
   validateSnapshot(snapshot);
