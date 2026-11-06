@@ -261,12 +261,21 @@ function decrypt(archive: string, target: string, key: Buffer) {
   }
 }
 
+type ArchiveCheck = {
+  snapshot_sha256: string;
+  snapshot_size_bytes: number;
+  migration_count: number;
+  isolated_sessions_invalidated: boolean;
+  offline_database_published?: boolean;
+  restored_sha256?: string;
+};
+
 function checkArchive(
   archive: string,
   key: Buffer,
   directory: string,
   publishPath?: string,
-) {
+): ArchiveCheck {
   privateDirectory(directory, "Recovery directory");
   const work = mkdtempSync(join(directory, ".mizvo-unseal-"));
   chmodSync(work, 0o700);
