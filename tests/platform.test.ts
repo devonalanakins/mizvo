@@ -1751,7 +1751,10 @@ test("client feedback and support stay private between invited clients on one pr
       await f.request(
         "/projects",
         "POST",
-        { name: "Private client conversations", purpose: "Test two invited client identities." },
+        {
+          name: "Private client conversations",
+          purpose: "Test two invited client identities.",
+        },
         founder,
       )
     ).value.id;
@@ -1821,8 +1824,20 @@ test("client feedback and support stay private between invited clients on one pr
     );
     assert.equal(shared.status, 201);
     for (const [session, own, other, ownSecret, otherSecret] of [
-      [first, [firstFeedback.value.id, firstSupport.value.id], [secondFeedback.value.id], "FIRST_CLIENT_FEEDBACK_SECRET", "SECOND_CLIENT_FEEDBACK_SECRET"],
-      [second, [secondFeedback.value.id], [firstFeedback.value.id, firstSupport.value.id], "SECOND_CLIENT_FEEDBACK_SECRET", "FIRST_CLIENT_FEEDBACK_SECRET"],
+      [
+        first,
+        [firstFeedback.value.id, firstSupport.value.id],
+        [secondFeedback.value.id],
+        "FIRST_CLIENT_FEEDBACK_SECRET",
+        "SECOND_CLIENT_FEEDBACK_SECRET",
+      ],
+      [
+        second,
+        [secondFeedback.value.id],
+        [firstFeedback.value.id, firstSupport.value.id],
+        "SECOND_CLIENT_FEEDBACK_SECRET",
+        "FIRST_CLIENT_FEEDBACK_SECRET",
+      ],
     ] as const) {
       const room = await f.request("/space" + path, "GET", undefined, session);
       assert.equal(room.status, 200);
@@ -1833,7 +1848,13 @@ test("client feedback and support stay private between invited clients on one pr
       const roomJSON = JSON.stringify(room.value);
       assert(roomJSON.includes(ownSecret));
       assert(!roomJSON.includes(otherSecret));
-      assert(!roomJSON.includes(session === second ? "PRIVATE_FIRST_SUPPORT_DETAILS" : "PRIVATE_BETA_SENTENCE"));
+      assert(
+        !roomJSON.includes(
+          session === second
+            ? "PRIVATE_FIRST_SUPPORT_DETAILS"
+            : "PRIVATE_BETA_SENTENCE",
+        ),
+      );
       for (const filter of ["feedback", "support"]) {
         const result = await f.request(
           "/space" + path + "/records?kind=" + filter,
@@ -1843,24 +1864,48 @@ test("client feedback and support stay private between invited clients on one pr
         );
         assert.equal(result.status, 200);
         for (const r of result.value.records) {
-          assert(own.includes(r.id), "Other-client record appeared in paginated " + filter);
+          assert(
+            own.includes(r.id),
+            "Other-client record appeared in paginated " + filter,
+          );
         }
       }
       for (const id of other) {
         assert.equal(
-          (await f.request("/space" + path + "/records/" + id, "GET", undefined, session)).status,
+          (
+            await f.request(
+              "/space" + path + "/records/" + id,
+              "GET",
+              undefined,
+              session,
+            )
+          ).status,
           404,
         );
         assert.equal(
-          (await f.request("/space" + path + "/records/" + id + "/history", "GET", undefined, session)).status,
+          (
+            await f.request(
+              "/space" + path + "/records/" + id + "/history",
+              "GET",
+              undefined,
+              session,
+            )
+          ).status,
           404,
         );
         assert.equal(
-          (await f.request("/space" + path + "/records/" + id, "PATCH", {
-            version: 1,
-            title: "Unauthorized update",
-            body: "Unauthorized",
-          }, session)).status,
+          (
+            await f.request(
+              "/space" + path + "/records/" + id,
+              "PATCH",
+              {
+                version: 1,
+                title: "Unauthorized update",
+                body: "Unauthorized",
+              },
+              session,
+            )
+          ).status,
           404,
         );
       }
@@ -1896,25 +1941,41 @@ test("client feedback and support stay private between invited clients on one pr
         session,
       );
       assert.equal(searchShared.status, 200);
-      assert(searchShared.value.some((record: any) => record.id === shared.value.id));
+      assert(
+        searchShared.value.some((record: any) => record.id === shared.value.id),
+      );
     }
     assert.equal(
-      (await f.request(
-        "/space" + path + "/records/" + firstSupport.value.id + "/status",
-        "POST",
-        { state: "open", version: 1 },
-        second,
-      )).status,
+      (
+        await f.request(
+          "/space" + path + "/records/" + firstSupport.value.id + "/status",
+          "POST",
+          { state: "open", version: 1 },
+          second,
+        )
+      ).status,
       404,
     );
     const team = await f.request(path, "GET", undefined, founder);
     assert.equal(team.status, 200);
     const teamIds = team.value.records.map((r: any) => r.id);
-    for (const id of [firstFeedback.value.id, firstSupport.value.id, secondFeedback.value.id, shared.value.id]) {
+    for (const id of [
+      firstFeedback.value.id,
+      firstSupport.value.id,
+      secondFeedback.value.id,
+      shared.value.id,
+    ]) {
       assert(teamIds.includes(id), "Project owner lost a project record");
     }
     assert.equal(
-      (await f.request(path + "/records/" + firstSupport.value.id + "/history", "GET", undefined, founder)).status,
+      (
+        await f.request(
+          path + "/records/" + firstSupport.value.id + "/history",
+          "GET",
+          undefined,
+          founder,
+        )
+      ).status,
       200,
     );
   } finally {
