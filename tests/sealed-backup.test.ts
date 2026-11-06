@@ -509,6 +509,22 @@ test("V0.24 offline restore rejects bad keys, corruption, existing targets and s
     assert.deepEqual(readdirSync(f.recoveryDir), ["restored.sqlite-wal"]);
     rmSync(target + "-wal");
 
+    const sidecarSymlink = target + "-wal";
+    const sidecarTarget = join(f.root, "sidecar-must-not-be-created");
+    symlinkSync(sidecarTarget, sidecarSymlink);
+    const danglingSidecar = run("scripts/sealed-backup.ts", [
+      "restore",
+      f.archive,
+      f.key,
+      target,
+    ]);
+    assert.notEqual(danglingSidecar.status, 0);
+    assert.equal(existsSync(target), false);
+    assert.equal(existsSync(sidecarTarget), false);
+    assert(lstatSync(sidecarSymlink).isSymbolicLink());
+    rmSync(sidecarSymlink);
+    assert.deepEqual(readdirSync(f.recoveryDir), []);
+
     // An operator cannot accidentally publish decrypted data under a
     // world-readable recovery parent or a nonexistent directory.
     chmodSync(f.recoveryDir, 0o755);
