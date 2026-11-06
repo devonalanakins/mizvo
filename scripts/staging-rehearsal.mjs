@@ -229,7 +229,24 @@ async function main() {
     );
 
     const port = await freeLoopbackPort();
-    const firstEnv = isolatedEnv(root, sourceDatabase, port);
+    const firstEnv = {
+      ...isolatedEnv(root, sourceDatabase, port),
+      MIZVO_EXPECTED_SERVER_SHA256: artifactSha,
+    };
+    // A mismatched independently supplied digest must stop server startup
+    // before touching the persisted SQLite database.
+    const rejected = spawnSync(process.execPath, ["dist/apps/api/server.js"], {
+      cwd: first,
+      env: { ...firstEnv, MIZVO_EXPECTED_SERVER_SHA256: "0".repeat(64) },
+      encoding: "utf8",
+      timeout: 8000,
+      maxBuffer: 8192,
+    });
+    assert.notEqual(rejected.status, 0);
+    assert.match(
+      String(rejected.stderr),
+      /Runtime server fingerprint differs from approved digest/,
+    );
     command(first, { ...firstEnv, MIZVO_ACCOUNT_PASSWORD: password }, [
       "dist/scripts/account.js",
       sampleEmail.founder,
@@ -244,6 +261,11 @@ async function main() {
     ]);
     child = stageProcess(first, firstEnv);
     await waitForHealth(child, firstEnv.MIZVO_ORIGIN, port);
+    const firstHealth = await fetch(
+      "http://127.0.0.1:" + port + "/api/health",
+    );
+    assert.equal(firstHealth.status, 200);
+    assert.equal((await firstHealth.json()).server_sha256, artifactSha);
     const firstApi = apiFactory(port);
     const page = await fetch("http://127.0.0.1:" + port + "/");
     assert.equal(page.status, 200);
@@ -419,9 +441,17 @@ async function main() {
     } finally {
       restored.close();
     }
-    const secondEnv = isolatedEnv(root, restoredDatabase, port);
+    const secondEnv = {
+      ...isolatedEnv(root, restoredDatabase, port),
+      MIZVO_EXPECTED_SERVER_SHA256: artifactSha,
+    };
     child = stageProcess(second, secondEnv);
     await waitForHealth(child, secondEnv.MIZVO_ORIGIN, port);
+    const secondHealth = await fetch(
+      "http://127.0.0.1:" + port + "/api/health",
+    );
+    assert.equal(secondHealth.status, 200);
+    assert.equal((await secondHealth.json()).server_sha256, artifactSha);
     const secondApi = apiFactory(port);
     await secondApi.required("/me", 401, "GET", undefined, owner);
     await secondApi.required("/me", 401, "GET", undefined, client);
