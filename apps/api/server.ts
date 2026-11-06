@@ -1066,18 +1066,14 @@ if (
   if (production && !origin.startsWith("https://"))
     throw new Error("Production requires an HTTPS origin.");
   const database = process.env.MIZVO_DATABASE ?? "var/mizvo.sqlite";
-  if (
-    production &&
-    (!process.env.MIZVO_DATABASE || !isAbsolute(database))
-  )
-    throw new Error("Production requires an explicit absolute MIZVO_DATABASE path.");
+  if (production && (!process.env.MIZVO_DATABASE || !isAbsolute(database)))
+    throw new Error(
+      "Production requires an explicit absolute MIZVO_DATABASE path.",
+    );
   const bindHost = process.env.MIZVO_BIND_HOST ?? "127.0.0.1";
   if (bindHost !== "127.0.0.1" && bindHost !== "0.0.0.0")
     throw new Error("Unsupported bind address.");
-  if (
-    bindHost === "0.0.0.0" &&
-    (!production || !origin.startsWith("https://"))
-  )
+  if (bindHost === "0.0.0.0" && !production)
     throw new Error(
       "Container network binding requires production HTTPS origin.",
     );
