@@ -209,6 +209,10 @@ try {
     .getByRole("heading", { name: "Your inquiry is recorded." })
     .waitFor();
   await signIn(page, founder.email);
+  await page
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("heading", { name: "Give your next project a home." })
+    .waitFor();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("link", { name: "Pipeline", exact: true }).click();
   await page
@@ -233,6 +237,14 @@ try {
     .getByRole("heading", { name: "Mizvo verification project" })
     .waitFor();
   const project = page.url().match(/projects\/([^?]+)/)[1];
+  await visit(page, config.origin + "/studio");
+  await page
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("heading", { name: "Open your most recent project." })
+    .waitFor();
+  await capture(page, "studio-home-action", 390);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await visit(page, config.origin + `/studio/projects/${project}`);
   await page.getByRole("link", { name: "Handoff", exact: true }).click();
   await page.getByRole("button", { name: "Prepare an ownership plan" }).click();
   await page
@@ -297,6 +309,18 @@ try {
     await page.locator(".record.decision .tag").textContent(),
     "proposed",
   );
+  await visit(page, config.origin + "/studio");
+  await page
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("heading", { name: "A project decision needs review." })
+    .waitFor();
+  await page
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("link", { name: /Open project decision/ })
+    .click();
+  await page
+    .getByRole("heading", { name: "Keep decisions explicit" })
+    .waitFor();
   await page.reload();
   await page
     .getByRole("heading", { name: "Architecture context, revised" })
@@ -628,7 +652,18 @@ try {
     .getByRole("heading", { name: "Approve the onboarding description" })
     .waitFor();
   await capture(client, "client-decisions", 390);
-  await visit(client, config.origin + `/space/projects/${project}`);
+  await visit(client, config.origin + "/space");
+  await client
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("heading", { name: "A client decision needs your response." })
+    .waitFor();
+  await client.getByRole("region", { name: "Suggested next action" })
+    .getByText("Approve the onboarding description").waitFor();
+  await capture(client, "client-home-action", 390);
+  await client
+    .getByRole("region", { name: "Suggested next action" })
+    .getByRole("link", { name: /Respond in Client Space/ })
+    .click();
   await client.getByText("One decision needs your input").waitFor();
   await client.getByText("Recorded version: Verification version 1").waitFor();
   await capture(client, "client-next-decision", 390);
