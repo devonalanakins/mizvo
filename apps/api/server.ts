@@ -181,6 +181,28 @@ export function application(
         });
         return;
       }
+      // Readiness is distinct from liveness: a listening process may have
+      // lost access to its database or required migration metadata.
+      if (path === "/api/ready") {
+        assert(method === "GET", 405, "Method not allowed.");
+        let ready = false;
+        try {
+          const organization = s.get(
+            "SELECT 1 AS present FROM organizations WHERE id=?",
+            config.organization,
+          );
+          const migrations = s.get(
+            "SELECT 1 AS present FROM migration_checksums WHERE version=(SELECT MAX(version) FROM migrations)",
+          );
+          ready = organization?.present === 1 && migrations?.present === 1;
+        } catch {
+          // Never expose database errors or schema details to public probes.
+        }
+        send(res, ready ? 200 : 503, {
+          status: ready ? "ready" : "unavailable",
+        });
+        return;
+      }
       const cookie = req.headers.cookie
         ?.split(";")
         .map((x) => x.trim())
