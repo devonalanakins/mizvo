@@ -171,7 +171,7 @@ export function application(
       if (path === "/api/health" && method === "GET") {
         send(res, 200, {
           status: "ok",
-          version: "0.18.0",
+          version: "0.19.0",
           storage: "sqlite",
           release: "local-review",
         });
