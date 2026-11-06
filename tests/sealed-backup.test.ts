@@ -360,21 +360,18 @@ test("V0.24 offline restore recovers a copied encrypted archive without reactiva
         1,
       );
       assert.equal(
-        recovered
-          .prepare("SELECT COUNT(*) AS count FROM sessions")
-          .get()?.count,
+        recovered.prepare("SELECT COUNT(*) AS count FROM sessions").get()
+          ?.count,
         0,
       );
       assert.equal(
-        recovered
-          .prepare("SELECT COUNT(*) AS count FROM projects")
-          .get()?.count,
+        recovered.prepare("SELECT COUNT(*) AS count FROM projects").get()
+          ?.count,
         1,
       );
       assert.equal(
-        recovered
-          .prepare("SELECT COUNT(*) AS count FROM memberships")
-          .get()?.count,
+        recovered.prepare("SELECT COUNT(*) AS count FROM memberships").get()
+          ?.count,
         1,
       );
       const organizationName = recovered
