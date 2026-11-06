@@ -38,12 +38,40 @@ export class Domain {
       object,
       now(),
     );
-    if (project)
+    if (project) {
+      // A generic activity alert still reveals that something happened.
+      // Client-only support/feedback conversations and directed decisions
+      // therefore notify internal teammates and only the affected client.
+      const record =
+        action === "feedback.created" ||
+        action.startsWith("support.") ||
+        action === "record.edited"
+          ? this.s.get(
+              "SELECT kind,actor_id FROM records WHERE id=? AND project_id=?",
+              object,
+              project,
+            )
+          : null;
+      const directedDecision = action.startsWith("client_decision.");
+      const privateRecord =
+        record?.kind === "feedback" || record?.kind === "support";
+      const restricted = directedDecision || privateRecord;
+      const recipient = directedDecision
+        ? this.s.get(
+            "SELECT client_id FROM client_decision_requests WHERE id=? AND project_id=?",
+            object,
+            project,
+          )?.client_id
+        : privateRecord
+          ? record?.actor_id
+          : null;
       for (const m of this.s.all(
-        `SELECT m.user_id FROM memberships m LEFT JOIN preferences p ON p.user_id=m.user_id WHERE m.project_id=? AND m.user_id<>? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND COALESCE(p.activity,1)=1`,
+        `SELECT m.user_id FROM memberships m LEFT JOIN preferences p ON p.user_id=m.user_id WHERE m.project_id=? AND m.user_id<>? AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) AND COALESCE(p.activity,1)=1 AND (?=0 OR m.role<>'client' OR m.user_id=?)`,
         project,
         actor,
         now(),
+        Number(restricted),
+        recipient,
       )) {
         this.s.run(
           "INSERT INTO notifications VALUES (?,?,?,?,?,NULL)",
@@ -54,6 +82,7 @@ export class Domain {
           now(),
         );
       }
+    }
   }
   projects(user: string, clients = false) {
     // Client Space uses an explicit public project projection, consistent
