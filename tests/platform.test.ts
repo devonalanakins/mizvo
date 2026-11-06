@@ -2583,7 +2583,11 @@ test("paged filters, cursors and direct records enforce project/client isolation
       ).value;
       assert(
         page.records.every(
-          (r: any) => r.kind === "note" && r.visibility === "client",
+          (r: any) =>
+            r.kind === "note" &&
+            r.can_edit === false &&
+            !("visibility" in r) &&
+            !("actor_id" in r),
         ),
       );
       assert(!JSON.stringify(page).includes("PRIVATE"));
