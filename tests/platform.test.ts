@@ -1384,6 +1384,198 @@ test("password changes invalidate other sessions, reject wrong current password,
     await f.stop();
   }
 });
+test("client notifications reveal only shared updates or private actions addressed to them", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const alice = await f.login(f.users.client.email);
+    const bob = await f.login(f.users.other.email);
+    const engineer = await f.login(f.users.contributor.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        {
+          name: "Notification audience isolation",
+          purpose: "Keep private support activity from other clients.",
+        },
+        founder,
+      )
+    ).value.id;
+    const path = "/projects/" + project;
+    for (const [person, session, role] of [
+      [f.users.client, alice, "client"],
+      [f.users.other, bob, "client"],
+      [f.users.contributor, engineer, "contributor"],
+    ] as const) {
+      const invited = await f.request(
+        path + "/invitations",
+        "POST",
+        { email: person.email, role },
+        founder,
+      );
+      assert.equal(invited.status, 201);
+      assert.equal(
+        (
+          await f.request(
+            "/invitations/accept",
+            "POST",
+            { token: invited.value.token },
+            session,
+          )
+        ).status,
+        200,
+      );
+    }
+    // Order: team owner, client Alice, client Bob, team engineer.
+    const members = [founder, alice, bob, engineer];
+    const counts = async () =>
+      Promise.all(
+        members.map(async (session) => {
+          const response = await f.request(
+            "/notifications",
+            "GET",
+            undefined,
+            session,
+          );
+          assert.equal(response.status, 200);
+          return response.value.filter((n: any) => n.project_id === project)
+            .length;
+        }),
+      );
+    let previous = await counts();
+    const expectDelta = async (expected: number[]) => {
+      const current = await counts();
+      assert.deepEqual(
+        current.map((count, index) => count - previous[index]!),
+        expected,
+      );
+      previous = current;
+    };
+    const feedback = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "feedback",
+        title: "ALICE_ONLY",
+        body: "Fictional private feedback.",
+      },
+      alice,
+    );
+    assert.equal(feedback.status, 201);
+    await expectDelta([1, 0, 0, 1]);
+    const support = await f.request(
+      "/space" + path + "/records",
+      "POST",
+      {
+        kind: "support",
+        title: "BOB_ONLY",
+        body: "Fictional private support.",
+      },
+      bob,
+    );
+    assert.equal(support.status, 201);
+    await expectDelta([1, 0, 0, 1]);
+    assert.equal(
+      (
+        await f.request(
+          path + "/records/" + support.value.id + "/status",
+          "POST",
+          { state: "resolved", version: 1 },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    await expectDelta([0, 0, 1, 1]);
+    assert.equal(
+      (
+        await f.request(
+          path + "/records",
+          "POST",
+          {
+            kind: "note",
+            title: "Internal-only plan",
+            body: "This activity is not client-facing.",
+            visibility: "internal",
+          },
+          founder,
+        )
+      ).status,
+      201,
+    );
+    await expectDelta([0, 0, 0, 1]);
+    assert.equal(
+      (
+        await f.request(
+          path + "/records",
+          "POST",
+          {
+            kind: "note",
+            title: "Shared client update",
+            body: "Both clients should learn that their project changed.",
+            visibility: "client",
+          },
+          founder,
+        )
+      ).status,
+      201,
+    );
+    await expectDelta([0, 1, 1, 1]);
+    const requested = await f.request(
+      path + "/client-decisions",
+      "POST",
+      {
+        client_id: f.users.client.id,
+        title: "Private client decision",
+        body: "Only Alice is asked to respond.",
+      },
+      founder,
+    );
+    assert.equal(requested.status, 201);
+    await expectDelta([0, 1, 0, 1]);
+    assert.equal(
+      (
+        await f.request(
+          "/space" + path + "/client-decisions/" + requested.value.id + "/respond",
+          "POST",
+          {
+            outcome: "accepted",
+            comment: "Reviewed by fictional Alice.",
+            version: 1,
+          },
+          alice,
+        )
+      ).status,
+      200,
+    );
+    await expectDelta([1, 0, 0, 1]);
+    const bobAlerts = (
+      await f.request("/notifications", "GET", undefined, bob)
+    ).value;
+    assert(!JSON.stringify(bobAlerts).includes("ALICE_ONLY"));
+    assert(!JSON.stringify(bobAlerts).includes("Private client decision"));
+    assert.equal(
+      (
+        await f.request(
+          path + "/members/" + f.users.other.id,
+          "PATCH",
+          { revoke: true },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.deepEqual(
+      (await f.request("/notifications", "GET", undefined, bob)).value,
+      [],
+      "Revoked clients cannot retrieve historical notifications.",
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
 test("grant expiry, cross-project object IDs, private notifications, and preference controls", async () => {
   const f = await fixture();
   try {
