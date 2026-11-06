@@ -595,6 +595,56 @@ function projectView() {
     `<div class="room-layout ${client || inspectorCollapsed || ["plan", "decisions", "proof", "code", "tests", "releases"].includes(tab) ? "inspector-hidden" : ""}"><section class="room-main">${main}</section>${client || ["plan", "decisions", "proof", "code", "tests", "releases"].includes(tab) ? "" : inspectorPanel()}</div>`
   );
 }
+function homeDecisionItems(focus: Data) {
+  if (route.surface === "space") {
+    const requests = focus.client_decisions ?? [];
+    return requests.length
+      ? requests
+          .map(
+            (r: Data) =>
+              `<p><a href="${projectPath(r.project_id)}">${e(r.title)} ${icon("arrow")}</a></p>`,
+          )
+          .join("")
+      : '<p class="muted">No current decision requests need your response.</p>';
+  }
+  return focus.decisions.length
+    ? focus.decisions
+        .map(
+          (r: Data) =>
+            `<p><a href="${projectPath(r.project_id)}#record-${e(r.id)}">${e(r.title)} ${icon("arrow")}</a></p>`,
+        )
+        .join("")
+    : '<p class="muted">No outstanding decision proposals.</p>';
+}
+function nextHomeAction(focus: Data) {
+  const client = route.surface === "space";
+  if (!projects.length)
+    return `<section class="card home-action" aria-label="Suggested next action"><p class="eyebrow">Your next step</p><h2>${client ? "Join your first project." : "Give your next project a home."}</h2><p class="muted">${client ? "Accept the invitation shared by your project team." : "Create a project to track its purpose, people and decisions."}</p>${client || !me!.founder ? button("Accept an invitation", "accept-invite") : button("Create a project", "new-project")}</section>`;
+  const requested = client ? (focus.client_decisions ?? [])[0] : null;
+  const task = !client ? focus.tasks[0] : null;
+  const decision = !client ? focus.decisions[0] : null;
+  const item = requested ?? task ?? decision;
+  const target = item?.project_id ?? projects[0].id;
+  const destination = requested
+    ? projectPath(target)
+    : task
+      ? projectPath(target, "plan")
+      : decision
+        ? projectPath(target)
+        : projectPath(target);
+  const title = requested
+    ? "A client decision needs your response."
+    : task
+      ? "Project work needs attention."
+      : decision
+        ? "A project decision needs review."
+        : "Open your most recent project.";
+  const description = item
+    ? e(item.title)
+    : "Continue where your project team left off.";
+  return `<section class="card home-action" aria-label="Suggested next action"><p class="eyebrow">Your next step</p><h2>${title}</h2><p class="muted">${description}</p><a class="button secondary" href="${destination}">${requested ? "Respond in Client Space" : task ? "Review project plan" : decision ? "Open project decision" : "Open project"} ${icon("arrow")}</a></section>`;
+}
+
 async function overview() {
   if (route.page === "settings") {
     const sessions = await api("/sessions");
@@ -646,7 +696,7 @@ async function overview() {
           ? button(`${icon("plus")} Create project`, "new-project", "")
           : button("Accept invitation", "accept-invite"),
       ) +
-      `<div class="page-body"><p class="eyebrow">Your focus today</p>${projectCards()}<div class="divider"></div><div class="grid"><section class="card"><h2>Awaiting a decision</h2>${focus.decisions.length ? focus.decisions.map((r: Data) => `<p><a href="${projectPath(r.project_id)}#record-${e(r.id)}">${e(r.title)} ${icon("arrow")}</a></p>`).join("") : '<p class="muted">No outstanding decision proposals.</p>'}</section><section class="card"><h2>Blockers & reviews</h2>${focus.tasks.length ? focus.tasks.map((r: Data) => `<p><a href="${projectPath(r.project_id, "plan")}">${badge(r.status)} ${e(r.title)}</a></p>`).join("") : '<p class="muted">No tasks are blocked or waiting for review.</p>'}</section>${route.surface === "studio" ? `<section class="card"><h2>Recent project activity</h2>${focus.activity.length ? focus.activity.map((r: Data) => `<div class="activity"><strong>${e(r.actor)}</strong> · ${e(r.action.replaceAll(".", " "))}<br><small>${date(r.created_at)}</small></div>`).join("") : '<p class="muted">Activity appears as you work.</p>'}</section>` : ""}</div><div class="divider"></div><p class="muted">Decisions, notes, and verified outcomes. No attendance tracking or productivity scores.</p></div>`
+      `<div class="page-body">${nextHomeAction(focus)}<p class="eyebrow">Your projects</p>${projectCards()}<div class="divider"></div><div class="grid"><section class="card"><h2>${route.surface === "space" ? "Your decision requests" : "Awaiting a decision"}</h2>${homeDecisionItems(focus)}</section><section class="card"><h2>Blockers & reviews</h2>${focus.tasks.length ? focus.tasks.map((r: Data) => `<p><a href="${projectPath(r.project_id, "plan")}">${badge(r.status)} ${e(r.title)}</a></p>`).join("") : '<p class="muted">No tasks are blocked or waiting for review.</p>'}</section>${route.surface === "studio" ? `<section class="card"><h2>Recent project activity</h2>${focus.activity.length ? focus.activity.map((r: Data) => `<div class="activity"><strong>${e(r.actor)}</strong> · ${e(r.action.replaceAll(".", " "))}<br><small>${date(r.created_at)}</small></div>`).join("") : '<p class="muted">Activity appears as you work.</p>'}</section>` : ""}</div><div class="divider"></div><p class="muted">Decisions, notes, and verified outcomes. No attendance tracking or productivity scores.</p></div>`
     );
   }
   const copy: Record<string, [string, string]> = {
