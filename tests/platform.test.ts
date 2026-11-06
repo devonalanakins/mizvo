@@ -1537,7 +1537,11 @@ test("client notifications reveal only shared updates or private actions address
     assert.equal(
       (
         await f.request(
-          "/space" + path + "/client-decisions/" + requested.value.id + "/respond",
+          "/space" +
+            path +
+            "/client-decisions/" +
+            requested.value.id +
+            "/respond",
           "POST",
           {
             outcome: "accepted",
@@ -1550,9 +1554,8 @@ test("client notifications reveal only shared updates or private actions address
       200,
     );
     await expectDelta([1, 0, 0, 1]);
-    const bobAlerts = (
-      await f.request("/notifications", "GET", undefined, bob)
-    ).value;
+    const bobAlerts = (await f.request("/notifications", "GET", undefined, bob))
+      .value;
     assert(!JSON.stringify(bobAlerts).includes("ALICE_ONLY"));
     assert(!JSON.stringify(bobAlerts).includes("Private client decision"));
     assert.equal(
