@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { createHash, randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -20,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Store } from "../packages/storage/database.ts";
 import { account, now } from "../packages/authz/security.ts";
+import { application, type Config } from "../apps/api/server.ts";
 
 const hash = (path: string) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -294,7 +296,7 @@ test("V0.19 sealing refuses overwrites, symlinks, weak key permissions and expos
   }
 });
 
-test("V0.24 offline restore recovers a copied encrypted archive without reactivating sessions", () => {
+test("V0.24 offline restore recovers a copied encrypted archive without reactivating sessions", async () => {
   const f = fixture();
   try {
     const snapshotHash = hash(f.snapshot);
@@ -376,6 +378,47 @@ test("V0.24 offline restore recovers a copied encrypted archive without reactiva
       );
     } finally {
       recovered.close();
+    }
+    // Demonstrate a real authorized local HTTP journey using only fictional
+    // data and the restored copy; do not expose or modify an existing host.
+    const config: Config = {
+      database: restoredPath,
+      origin: "http://localhost",
+      organization: "fictional-org",
+    };
+    const app = application(config);
+    try {
+      app.server.listen(0, "127.0.0.1");
+      await once(app.server, "listening");
+      const address = app.server.address();
+      assert(address && typeof address !== "string");
+      config.origin = "http://localhost:" + address.port;
+      const base = "http://127.0.0.1:" + address.port;
+      const login = await fetch(base + "/api/login", {
+        method: "POST",
+        headers: {
+          Origin: config.origin,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "sealed-backup@example.test",
+          password: "Fictional-secret-only-password-2026",
+        }),
+      });
+      assert.equal(login.status, 200);
+      const session = login.headers.get("set-cookie")?.split(";")[0];
+      assert(session);
+      const response = await fetch(base + "/api/projects", {
+        headers: { Cookie: session },
+      });
+      assert.equal(response.status, 200);
+      const projects = await response.json();
+      assert.equal(projects.length, 1);
+      assert.equal(projects[0].id, "synthetic-recovered-project");
+      assert.equal(projects[0].role, "owner");
+    } finally {
+      await new Promise<void>((done) => app.server.close(() => done()));
+      app.s.close();
     }
     assert.equal(hash(f.snapshot), snapshotHash);
     assert.equal(
