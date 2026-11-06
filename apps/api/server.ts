@@ -6,7 +6,7 @@ import {
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { resolve, extname } from "node:path";
+import { resolve, extname, isAbsolute } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { Store, type Row } from "../../packages/storage/database.ts";
 import {
@@ -56,6 +56,13 @@ export function application(
   config: Config,
   dependencies: { github?: GitHub; previewFetch?: typeof fetch } = {},
 ) {
+  // Refuse invalid production origins before opening or migrating SQLite.
+  const production = config.production === true;
+  assert(
+    !production || config.origin.startsWith("https://"),
+    500,
+    "Production requires an HTTPS origin.",
+  );
   const s = new Store(config.database),
     d = new Domain(s, config.organization),
     github =
@@ -71,12 +78,6 @@ export function application(
     "Mizvo",
   );
   const dummy = hashPassword("Timing-only-unusable-account-password");
-  const production = config.production === true;
-  assert(
-    !production || config.origin.startsWith("https://"),
-    500,
-    "Production requires an HTTPS origin.",
-  );
   const send = (res: ServerResponse, status: number, value: unknown) => {
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
@@ -1054,12 +1055,37 @@ if (
     (!/^[a-f0-9]{64}$/.test(expected) || expected !== serverFileSha256)
   )
     throw new Error("Runtime server fingerprint differs from approved digest.");
+  // Check the complete operator-controlled startup configuration before
+  // application() opens or migrates a database. A relative fallback is fine
+  // for local review, but could silently lose production data on redeploy.
   const port = Number(process.env.PORT ?? 4173);
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
+    throw new Error("PORT must be an integer between 1 and 65535.");
+  const production = process.env.NODE_ENV === "production";
+  const origin = process.env.MIZVO_ORIGIN ?? `http://localhost:${port}`;
+  if (production && !origin.startsWith("https://"))
+    throw new Error("Production requires an HTTPS origin.");
+  const database = process.env.MIZVO_DATABASE ?? "var/mizvo.sqlite";
+  if (
+    production &&
+    (!process.env.MIZVO_DATABASE || !isAbsolute(database))
+  )
+    throw new Error("Production requires an explicit absolute MIZVO_DATABASE path.");
+  const bindHost = process.env.MIZVO_BIND_HOST ?? "127.0.0.1";
+  if (bindHost !== "127.0.0.1" && bindHost !== "0.0.0.0")
+    throw new Error("Unsupported bind address.");
+  if (
+    bindHost === "0.0.0.0" &&
+    (!production || !origin.startsWith("https://"))
+  )
+    throw new Error(
+      "Container network binding requires production HTTPS origin.",
+    );
   const app = application({
-    database: process.env.MIZVO_DATABASE ?? "var/mizvo.sqlite",
-    origin: process.env.MIZVO_ORIGIN ?? `http://localhost:${port}`,
+    database,
+    origin,
     organization: process.env.MIZVO_ORGANIZATION ?? "mizvo",
-    production: process.env.NODE_ENV === "production",
+    production,
     githubRepositories: (process.env.MIZVO_GITHUB_REPOSITORIES ?? "")
       .split(",")
       .filter(Boolean),
@@ -1069,17 +1095,6 @@ if (
       .map((s) => s.trim())
       .filter(Boolean),
   });
-  const bindHost = process.env.MIZVO_BIND_HOST ?? "127.0.0.1";
-  if (bindHost !== "127.0.0.1" && bindHost !== "0.0.0.0")
-    throw new Error("Unsupported bind address.");
-  if (
-    bindHost === "0.0.0.0" &&
-    (process.env.NODE_ENV !== "production" ||
-      !process.env.MIZVO_ORIGIN?.startsWith("https://"))
-  )
-    throw new Error(
-      "Container network binding requires production HTTPS origin.",
-    );
   app.server.listen(port, bindHost, () =>
     console.log(`Mizvo listening on ${bindHost}:${port}`),
   );
