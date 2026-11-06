@@ -34,6 +34,12 @@ CI runs `npm run test:installation` after compilation and manifest verification.
 
 CI runs `npm run test:installation` after compilation and manifest verification. The synthetic command copies the full `dist/` tree and manifest to private temporary storage, passes trusted values from the checked-out GitHub job, verifies the candidate, deliberately adds an unreviewed file, and asserts rejection. It deletes the temporary installation and records only a sanitized `docs/evidence/installation-preflight.json` receipt. Dedicated negative tests also reject altered manifest digests, mismatched source IDs, modified/missing/extra files and symlinks.
 
+## Live entrypoint fingerprint cross-check
+
+The optional standalone `MIZVO_EXPECTED_SERVER_SHA256` can be set to the SHA-256 listed for `apps/api/server.js` inside an **independently approved and fully verified** build manifest. The application then aborts startup if the bytes of its loaded entrypoint file differ. Its unauthenticated `GET /api/health` reports the same `server_sha256`, allowing a release operator to compare the response from the intended TLS endpoint with the approved entrypoint digest. Synthetic CI separately validates this path for copied installations, restored staging, TLS and OCI, and rejects an intentional mismatched boot.
+
+The check is byte-level evidence for one server file and does not authenticate the host, bind the response to an immutable image/entire distribution, identify the Node process remotely, or prevent a malicious server from fabricating a response. The independently trusted manifest, verified complete file set, TLS identity, protected process-manager environment, and human release decision remain essential.
+
 ## Release gates this does not satisfy
 
 The CI exercise derives the expected manifest SHA within the same CI job, so that check **does not establish an independent cryptographic root of trust**. A release operator must compare against trusted out-of-band evidence or an independently validated signed provenance attestation.
