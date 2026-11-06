@@ -69,7 +69,8 @@ async function settledApplication(p) {
   // page error. Never suppress or exclude browser errors from the final gate.
   if (p.url().startsWith("http")) {
     await p.waitForFunction(
-      () => document.querySelector("#app")?.getAttribute("aria-busy") !== "true",
+      () =>
+        document.querySelector("#app")?.getAttribute("aria-busy") !== "true",
     );
   }
   await p.waitForLoadState("networkidle");
