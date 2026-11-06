@@ -568,7 +568,12 @@ test("client feedback and support stay private between clients on the same proje
       [alice, feedback, support, "BOB_PRIVATE_"],
       [bob, support, feedback, "ALICE_PRIVATE_"],
     ] as const) {
-      for (const kind of ["", "?kind=feedback", "?kind=support", "?kind=shared"]) {
+      for (const kind of [
+        "",
+        "?kind=feedback",
+        "?kind=support",
+        "?kind=shared",
+      ]) {
         const page = await f.request(
           "/space" + path + "/records" + kind,
           "GET",
@@ -579,25 +584,60 @@ test("client feedback and support stay private between clients on the same proje
         assert(!JSON.stringify(page.value).includes(marker));
       }
       assert.equal(
-        (await f.request("/space" + path + "/records/" + own, "GET", undefined, session)).status,
+        (
+          await f.request(
+            "/space" + path + "/records/" + own,
+            "GET",
+            undefined,
+            session,
+          )
+        ).status,
         200,
       );
       assert.equal(
-        (await f.request("/space" + path + "/records/" + own + "/history", "GET", undefined, session)).status,
+        (
+          await f.request(
+            "/space" + path + "/records/" + own + "/history",
+            "GET",
+            undefined,
+            session,
+          )
+        ).status,
         200,
       );
       for (const suffix of ["", "/history"]) {
         assert.equal(
-          (await f.request("/space" + path + "/records/" + forbidden + suffix, "GET", undefined, session)).status,
+          (
+            await f.request(
+              "/space" + path + "/records/" + forbidden + suffix,
+              "GET",
+              undefined,
+              session,
+            )
+          ).status,
           404,
         );
       }
       assert.equal(
-        (await f.request("/space" + path + "/records/" + forbidden, "PATCH", { title: "Unauthorized", body: "Denied", version: 1 }, session)).status,
+        (
+          await f.request(
+            "/space" + path + "/records/" + forbidden,
+            "PATCH",
+            { title: "Unauthorized", body: "Denied", version: 1 },
+            session,
+          )
+        ).status,
         404,
       );
       assert.equal(
-        (await f.request("/space" + path + "/records/" + forbidden + "/status", "POST", { state: "open", version: 1 }, session)).status,
+        (
+          await f.request(
+            "/space" + path + "/records/" + forbidden + "/status",
+            "POST",
+            { state: "open", version: 1 },
+            session,
+          )
+        ).status,
         404,
       );
       for (const query of ["ALICE_PRIVATE_", "BOB_PRIVATE_"]) {
@@ -619,12 +659,14 @@ test("client feedback and support stay private between clients on the same proje
       assert.equal(sharedLookup.status, 200);
     }
     assert(
-      (await f.request("/search?q=ALICE_PRIVATE_", "GET", undefined, owner))
-        .value.some((r: any) => r.id === feedback),
+      (
+        await f.request("/search?q=ALICE_PRIVATE_", "GET", undefined, owner)
+      ).value.some((r: any) => r.id === feedback),
     );
     assert(
-      (await f.request("/search?q=BOB_PRIVATE_", "GET", undefined, owner))
-        .value.some((r: any) => r.id === support),
+      (
+        await f.request("/search?q=BOB_PRIVATE_", "GET", undefined, owner)
+      ).value.some((r: any) => r.id === support),
     );
     const revoked = await f.request(
       path + "/members/" + f.users.client.id,
