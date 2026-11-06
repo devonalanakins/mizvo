@@ -1,0 +1,27 @@
+name: Temporary privacy test formatter evidence
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  format-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - run: npx prettier --write tests/platform.test.ts
+      - run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const source = fs.readFileSync("tests/platform.test.ts", "utf8");
+            const start = source.indexOf("test(\"client feedback and support stay private between invited clients");
+            const end = source.indexOf("test(\"client support requests have attributable", start);
+            if (start < 0 || end <= start) process.exit(1);
+            console.log("MIZVO_PRIVACY_FORMAT_START");
+            process.stdout.write(source.slice(start, end));
+            console.log("MIZVO_PRIVACY_FORMAT_END");
+          '
