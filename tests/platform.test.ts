@@ -2472,6 +2472,158 @@ test("targeted client decisions keep request versions, recipient isolation and i
   }
 });
 
+test("V0.20 Client Space home includes only current decisions addressed to that client", async () => {
+  const f = await fixture();
+  try {
+    const founder = await f.login(f.users.owner.email);
+    const first = await f.login(f.users.client.email);
+    const second = await f.login(f.users.other.email);
+    const engineer = await f.login(f.users.contributor.email);
+    const project = (
+      await f.request(
+        "/projects",
+        "POST",
+        { name: "Next action privacy", purpose: "Keep client decisions scoped." },
+        founder,
+      )
+    ).value.id;
+    const path = "/projects/" + project;
+    assert.deepEqual(
+      (await f.request("/space/home", "GET", undefined, first)).value
+        .client_decisions,
+      [],
+    );
+    for (const [user, session, role] of [
+      [f.users.client, first, "client"],
+      [f.users.other, second, "client"],
+      [f.users.contributor, engineer, "contributor"],
+    ] as const) {
+      const invitation = await f.request(
+        path + "/invitations",
+        "POST",
+        { email: user.email, role },
+        founder,
+      );
+      assert.equal(invitation.status, 201);
+      assert.equal(
+        (
+          await f.request(
+            "/invitations/accept",
+            "POST",
+            { token: invitation.value.token },
+            session,
+          )
+        ).status,
+        200,
+      );
+    }
+    const brief = {
+      problem: "People need a clear decision.",
+      audience: "The invited client.",
+      outcome: "Respond to one current request.",
+      success_criteria: "Only the intended recipient sees it.",
+      exclusions: "Internal notes.",
+      assumptions: "Synthetic review.",
+    };
+    const shared = await f.request(
+      path + "/brief-revisions",
+      "POST",
+      { ...brief, visibility: "client", base_revision: 0 },
+      founder,
+    );
+    assert.equal(shared.status, 201);
+    const addressed = await f.request(
+      path + "/client-decisions",
+      "POST",
+      {
+        client_id: f.users.client.id,
+        title: "FIRST_CLIENT_PRIVATE_ACTION",
+        body: "Is the fictional interface clear?",
+        brief_revision_id: shared.value.id,
+      },
+      founder,
+    );
+    assert.equal(addressed.status, 201);
+    const other = await f.request(
+      path + "/client-decisions",
+      "POST",
+      {
+        client_id: f.users.other.id,
+        title: "SECOND_CLIENT_PRIVATE_ACTION",
+        body: "Another recipient-specific question.",
+      },
+      founder,
+    );
+    assert.equal(other.status, 201);
+    const clientHome = (
+      await f.request("/space/home", "GET", undefined, first)
+    ).value;
+    assert.equal(clientHome.client_decisions.length, 1);
+    assert.equal(clientHome.client_decisions[0].id, addressed.value.id);
+    assert.equal(
+      clientHome.client_decisions[0].title,
+      "FIRST_CLIENT_PRIVATE_ACTION",
+    );
+    assert.equal(clientHome.client_decisions[0].project_id, project);
+    assert.equal(clientHome.decisions.length, 0);
+    assert(!JSON.stringify(clientHome).includes("SECOND_CLIENT_PRIVATE_ACTION"));
+    assert(!JSON.stringify(clientHome).includes("Is the fictional interface clear?"));
+    const otherHome = (
+      await f.request("/space/home", "GET", undefined, second)
+    ).value;
+    assert.deepEqual(
+      otherHome.client_decisions.map((d: any) => d.id),
+      [other.value.id],
+    );
+    assert(!JSON.stringify(otherHome).includes("FIRST_CLIENT_PRIVATE_ACTION"));
+    const engineerHome = (
+      await f.request("/home", "GET", undefined, engineer)
+    ).value;
+    assert.deepEqual(engineerHome.client_decisions, []);
+    assert(
+      !JSON.stringify(engineerHome).includes("FIRST_CLIENT_PRIVATE_ACTION"),
+    );
+    const revised = await f.request(
+      path + "/brief-revisions",
+      "POST",
+      { ...brief, outcome: "Revised outcome", visibility: "client", base_revision: 1 },
+      founder,
+    );
+    assert.equal(revised.status, 201);
+    assert.deepEqual(
+      (await f.request("/space/home", "GET", undefined, first)).value
+        .client_decisions,
+      [],
+      "A request linked to a superseded shared brief must not be actionable.",
+    );
+    assert.equal(
+      (await f.request("/space/home", "GET", undefined, second)).value
+        .client_decisions.length,
+      1,
+      "An unlinked request can remain actionable.",
+    );
+    assert.equal(
+      (
+        await f.request(
+          path + "/members/" + f.users.other.id,
+          "PATCH",
+          { revoke: true },
+          founder,
+        )
+      ).status,
+      200,
+    );
+    assert.deepEqual(
+      (await f.request("/space/home", "GET", undefined, second)).value
+        .client_decisions,
+      [],
+      "A revoked membership cannot see prior requests.",
+    );
+  } finally {
+    await f.stop();
+  }
+});
+
 test("Living Brief preserves private revisions, client-safe projection, exact preview decision and stale-response boundary", async () => {
   const f = await fixture();
   try {
