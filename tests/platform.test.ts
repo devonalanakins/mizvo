@@ -562,6 +562,44 @@ test("client feedback and support stay private between clients on the same proje
     assert(bobRoom.value.records.some((r: any) => r.id === shared));
     assert(teamRoom.value.records.some((r: any) => r.id === feedback));
     assert(teamRoom.value.records.some((r: any) => r.id === support));
+    // Author-private records still support client editing, without leaking
+    // database linkage or current/future internal model columns.
+    const clientRecordKeys = [
+      "actor",
+      "body",
+      "can_edit",
+      "created_at",
+      "id",
+      "kind",
+      "state",
+      "title",
+      "updated_at",
+      "version",
+    ].sort();
+    const historyKeys = [
+      "actor",
+      "body",
+      "created_at",
+      "state",
+      "title",
+      "version",
+    ].sort();
+    for (const [view, own] of [
+      [aliceRoom.value, feedback],
+      [bobRoom.value, support],
+    ] as const) {
+      const ownRecord = view.records.find((r: any) => r.id === own);
+      const sharedRecord = view.records.find((r: any) => r.id === shared);
+      assert.deepEqual(Object.keys(ownRecord).sort(), clientRecordKeys);
+      assert.deepEqual(Object.keys(sharedRecord).sort(), clientRecordKeys);
+      assert.equal(ownRecord.can_edit, true);
+      assert.equal(sharedRecord.can_edit, false);
+    }
+    const internalRecord = teamRoom.value.records.find(
+      (r: any) => r.id === feedback,
+    );
+    assert.equal(internalRecord.project_id, project);
+    assert.equal(internalRecord.actor_id, f.users.client.id);
     assert(!JSON.stringify(aliceRoom.value).includes("BOB_PRIVATE_"));
     assert(!JSON.stringify(bobRoom.value).includes("ALICE_PRIVATE_"));
     for (const [session, own, forbidden, marker] of [
@@ -582,29 +620,29 @@ test("client feedback and support stay private between clients on the same proje
         );
         assert.equal(page.status, 200);
         assert(!JSON.stringify(page.value).includes(marker));
+        for (const record of page.value.records) {
+          assert.deepEqual(Object.keys(record).sort(), clientRecordKeys);
+        }
       }
-      assert.equal(
-        (
-          await f.request(
-            "/space" + path + "/records/" + own,
-            "GET",
-            undefined,
-            session,
-          )
-        ).status,
-        200,
+      const direct = await f.request(
+        "/space" + path + "/records/" + own,
+        "GET",
+        undefined,
+        session,
       );
-      assert.equal(
-        (
-          await f.request(
-            "/space" + path + "/records/" + own + "/history",
-            "GET",
-            undefined,
-            session,
-          )
-        ).status,
-        200,
+      assert.equal(direct.status, 200);
+      assert.deepEqual(Object.keys(direct.value).sort(), clientRecordKeys);
+      assert.equal(direct.value.can_edit, true);
+      const history = await f.request(
+        "/space" + path + "/records/" + own + "/history",
+        "GET",
+        undefined,
+        session,
       );
+      assert.equal(history.status, 200);
+      assert(history.value.length > 0);
+      for (const entry of history.value)
+        assert.deepEqual(Object.keys(entry).sort(), historyKeys);
       for (const suffix of ["", "/history"]) {
         assert.equal(
           (
@@ -657,7 +695,18 @@ test("client feedback and support stay private between clients on the same proje
         session,
       );
       assert.equal(sharedLookup.status, 200);
+      assert.deepEqual(Object.keys(sharedLookup.value).sort(), clientRecordKeys);
+      assert.equal(sharedLookup.value.can_edit, false);
     }
+    const internalHistory = await f.request(
+      path + "/records/" + feedback + "/history",
+      "GET",
+      undefined,
+      owner,
+    );
+    assert.equal(internalHistory.status, 200);
+    assert.equal(internalHistory.value[0].record_id, feedback);
+    assert.equal(internalHistory.value[0].actor_id, f.users.client.id);
     assert(
       (
         await f.request("/search?q=ALICE_PRIVATE_", "GET", undefined, owner)
