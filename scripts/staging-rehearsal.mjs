@@ -120,7 +120,7 @@ async function stop(child) {
 }
 
 async function waitForHealth(child, origin, port) {
-  const endpoint = "http://127.0.0.1:" + port + "/api/health";
+  const endpoint = "http://127.0.0.1:" + port + "/api/ready";
   const started = Date.now();
   while (Date.now() - started < durationLimitMs) {
     assert(
@@ -133,8 +133,7 @@ async function waitForHealth(child, origin, port) {
       });
       if (response.status === 200) {
         const value = await response.json();
-        assert.equal(value.status, "ok");
-        assert.equal(value.storage, "sqlite");
+        assert.equal(value.status, "ready");
         return;
       }
     } catch {

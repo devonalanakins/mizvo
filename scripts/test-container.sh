@@ -163,8 +163,8 @@ wait_until_healthy() {
   port="${mapping##*:}"
   for i in $(seq 1 60); do
     if curl --silent --fail --max-time 2 \
-        "http://127.0.0.1:$port/api/health" \
-        | grep -q '"status":"ok"'; then
+        "http://127.0.0.1:$port/api/ready" \
+        | grep -q '"status":"ready"'; then
       return
     fi
     sleep 1

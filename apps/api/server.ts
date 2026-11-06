@@ -181,6 +181,49 @@ export function application(
         });
         return;
       }
+      // Readiness is distinct from liveness: a listening process may have
+      // lost access to its database or required migration metadata.
+      if (path === "/api/ready") {
+        assert(method === "GET", 405, "Method not allowed.");
+        let ready = false;
+        try {
+          const organization = s.get(
+            "SELECT 1 AS present FROM organizations WHERE id=?",
+            config.organization,
+          );
+          const migrations = s.get(
+            "SELECT COUNT(*) AS applied, SUM(CASE WHEN c.version IS NULL THEN 1 ELSE 0 END) AS unmatched FROM migrations m LEFT JOIN migration_checksums c ON c.version=m.version",
+          );
+          // Exercise the critical auth, project and write-limit schemas without
+          // reading application records. An empty installation is valid, but
+          // a missing required table/column must make readiness fail closed.
+          for (const query of [
+            "SELECT id FROM users LIMIT 1",
+            "SELECT hash FROM sessions LIMIT 1",
+            "SELECT organization_id,user_id,role FROM organization_members LIMIT 1",
+            "SELECT id,organization_id,owner_id,status FROM projects LIMIT 1",
+            "SELECT project_id,user_id,role,revoked_at,expires_at FROM memberships LIMIT 1",
+            "SELECT id,project_id,token_hash,expires_at FROM invitations LIMIT 1",
+            "SELECT id,project_id,kind,visibility FROM records LIMIT 1",
+            "SELECT id,project_id,status FROM tasks LIMIT 1",
+            "SELECT id,project_id,visibility FROM releases LIMIT 1",
+            "SELECT id,project_id,client_id,status FROM client_decision_requests LIMIT 1",
+            "SELECT user_id,project_id,action FROM notifications LIMIT 1",
+            "SELECT key,count,resets_at FROM rate_limits LIMIT 1",
+          ])
+            s.get(query);
+          ready =
+            organization?.present === 1 &&
+            Number(migrations?.applied ?? 0) > 0 &&
+            migrations?.unmatched === 0;
+        } catch {
+          // Never expose database errors or schema details to public probes.
+        }
+        send(res, ready ? 200 : 503, {
+          status: ready ? "ready" : "unavailable",
+        });
+        return;
+      }
       const cookie = req.headers.cookie
         ?.split(";")
         .map((x) => x.trim())

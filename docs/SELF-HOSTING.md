@@ -32,6 +32,12 @@ The sample hostname is a configuration example, not an owned or deployed Mizvo d
 
 Use a dedicated non-root OS account. Keep the database directory mode 0700; backup snapshots are mode 0600. Protect the volume and backups with host encryption and administrator access controls. Provision real accounts only after approved identity verification and authorized access grants.
 
+## Liveness versus readiness
+
+`GET /api/health` is an unauthenticated liveness signal indicating the process is serving HTTP; its `status: ok` is **not proof** the SQLite database or any application workflow is operational. Use unauthenticated `GET /api/ready` for host startup/readiness gates. It performs bounded read-only checks for the configured organization, migration/checksum correspondence, and essential account, project, membership, invitation, task, release, decision, notification and write-rate-limit tables. It returns `200 {"status":"ready"}` on success or `503 {"status":"unavailable"}` if checks fail, without returning record content, SQL errors or schema details. The probe does not write data and cannot prove disk writeability, external integrations, recovery objectives, security approvals or deployed release identity. Do not use the public result as an authorization or production-acceptance signal; confirm authenticated journeys and independent backup restoration separately.
+
+The local synthetic staging, HTTPS proxy and container health-check rehearsals require this readiness result before exercising accounts. Operations should treat repeated 503 results as a private investigation/rollback trigger and retain the existing process liveness signal for diagnosis; never clear or replace a production database merely because readiness fails.
+
 ## GitHub
 
 The server administrator first allowlists an exact repository. The project owner/founder then explicitly associates it with a project. Internal members may read branches, commits, pull requests, source, exact-commit check runs and comparisons. Clients cannot use these endpoints. No shell, runner, arbitrary server fetch URL, write token, deployment token or automatic code execution is provided.

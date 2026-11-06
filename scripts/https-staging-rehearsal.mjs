@@ -59,10 +59,10 @@ async function waitForUpstream(port, child) {
       "Staging app quit before readiness",
     );
     try {
-      const r = await fetch("http://127.0.0.1:" + port + "/api/health", {
+      const r = await fetch("http://127.0.0.1:" + port + "/api/ready", {
         signal: AbortSignal.timeout(800),
       });
-      if (r.status === 200 && (await r.json()).status === "ok") return;
+      if (r.status === 200 && (await r.json()).status === "ready") return;
     } catch {
       // The loopback subprocess has not yet started listening.
     }
@@ -328,6 +328,9 @@ async function main() {
       /default-src 'self'/,
     );
     assert.equal(health.value.storage, "sqlite");
+    const ready = await secureRequest(tlsPort, identity.cert, "/api/ready");
+    assert.equal(ready.status, 200);
+    assert.deepEqual(ready.value, { status: "ready" });
     const html = await secureRequest(tlsPort, identity.cert, "/");
     assert.equal(html.status, 200);
     assert.match(html.text, /Mizvo/);

@@ -27,6 +27,10 @@ No open registration, collaborator email, automatic invitation delivery, AI proc
 
 The optional operator CLI can authenticate/encrypt a verified detached SQLite snapshot with an externally managed owner-private 32-byte key, random nonce, AES-256-GCM, integrity/migration checks and exclusive publication; it never automatically uploads archives or alters the active database. Isolated restore checks delete temporary plaintext on normal completion/failure, but cannot guarantee crash-resistant cleanup or underlying filesystem encryption. Key custody/rotation, real off-host retention, restore tests, independent cryptographic review and provider controls remain unverified; use only approved encrypted private storage and separate key custody. See [Sealed backups](SEALED-BACKUPS.md).
 
+## Readiness probe boundary
+
+The unauthenticated `GET /api/ready` is a minimal operational readiness indicator. It checks the configured organization, migration/checksum correspondence and representative account, project authorization, invitation, record, and rate-limit table reads without exposing SQL errors, data or internal model details. It returns 503 if those reads fail. It cannot guarantee disk writeability, transaction success, restored permissions, externally verified release identity or business-level health. `GET /api/health` deliberately remains a lightweight process-liveness response. Operators must not mistake either for independent security certification.
+
 ## Limits that still govern release
 
 This is an engineering review build. No qualified human security signature, penetration test, real-user usability study, assistive-technology screen-reader session, production TLS/proxy test, private GitHub credential test, load test, or production recovery drill is claimed. The code-integrity review is a distinct adversarial pass by the implementation agent, not an independent human reviewer.
