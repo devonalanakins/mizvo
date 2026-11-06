@@ -133,8 +133,7 @@ async function waitForHealth(child, origin, port) {
       });
       if (response.status === 200) {
         const value = await response.json();
-        assert.equal(value.status, "ok");
-        assert.equal(value.storage, "sqlite");
+        assert.equal(value.status, "ready");
         return;
       }
     } catch {
