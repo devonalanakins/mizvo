@@ -1,9 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { createHash, randomBytes } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -18,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Store } from "../packages/storage/database.ts";
 import { account, now } from "../packages/authz/security.ts";
+import { application, type Config } from "../apps/api/server.ts";
 
 const hash = (path: string) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -57,6 +61,23 @@ function fixture() {
     "Fictional-secret-only-password-2026",
     "fictional-org",
     "founder",
+  );
+  store.run(
+    "INSERT INTO projects(id,organization_id,name,purpose,scope,owner_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+    "synthetic-recovered-project",
+    "fictional-org",
+    "Restorable synthetic project",
+    "Recovery integrity test",
+    "Synthetic records only",
+    user.id,
+    now(),
+    now(),
+  );
+  store.run(
+    "INSERT INTO memberships VALUES (?,?,?,NULL,NULL)",
+    "synthetic-recovered-project",
+    user.id,
+    "owner",
   );
   store.run(
     "INSERT INTO sessions VALUES (?,?,?,?,?)",
@@ -270,6 +291,279 @@ test("V0.19 sealing refuses overwrites, symlinks, weak key permissions and expos
     );
     assert.equal(existsSync(join(f.archiveDir, "exposed.mzseal")), false);
     assert.equal(readdirSync(f.recoveryDir).length, 0);
+
+    chmodSync(f.backupDir, 0o700);
+    const danglingWal = f.snapshot + "-wal";
+    symlinkSync(join(f.root, "absent-wal-target"), danglingWal);
+    const unsafe = run("scripts/sealed-backup.ts", [
+      "seal",
+      f.snapshot,
+      join(f.archiveDir, "sidecar-unsafe.mzseal"),
+      f.key,
+    ]);
+    assert.notEqual(unsafe.status, 0);
+    assert(lstatSync(danglingWal).isSymbolicLink());
+    assert.equal(
+      existsSync(join(f.archiveDir, "sidecar-unsafe.mzseal")),
+      false,
+    );
+  } finally {
+    f.dispose();
+  }
+});
+
+test("V0.24 offline restore recovers a copied encrypted archive without reactivating sessions", async () => {
+  const f = fixture();
+  try {
+    const snapshotHash = hash(f.snapshot);
+    const sourceSessions = f.store.get(
+      "SELECT COUNT(*) AS count FROM sessions",
+    )!.count;
+    assert(sourceSessions > 0);
+    const sealed = run("scripts/sealed-backup.ts", [
+      "seal",
+      f.snapshot,
+      f.archive,
+      f.key,
+    ]);
+    assert.equal(sealed.status, 0, sealed.stderr);
+
+    // The archive arrives in a separate owner-private recovery workspace.
+    // This is a local transfer simulation, not an actual off-host operation.
+    const transported = join(f.recoveryDir, "retrieved.mzseal");
+    copyFileSync(f.archive, transported);
+    chmodSync(transported, 0o600);
+    assert.equal(hash(transported), hash(f.archive));
+
+    const restoredPath = join(f.recoveryDir, "restored.sqlite");
+    const result = run("scripts/sealed-backup.ts", [
+      "restore",
+      transported,
+      f.key,
+      restoredPath,
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(receipt.schema, "mizvo.sealed-offline-restore.v1");
+    assert.equal(receipt.archive_sha256, hash(transported));
+    assert.equal(receipt.snapshot_sha256, snapshotHash);
+    assert.equal(receipt.restored_sha256, hash(restoredPath));
+    assert.equal(receipt.offline_database_published, true);
+    assert.equal(receipt.isolated_sessions_invalidated, true);
+    assert.equal(receipt.external_off_host_transport_verified, false);
+    assert.equal(receipt.actual_production_recovery_verified, false);
+    assert.equal(receipt.release_approved, false);
+    assert.equal(lstatSync(restoredPath).mode & 0o077, 0);
+    assert.deepEqual(readdirSync(f.recoveryDir).sort(), [
+      "restored.sqlite",
+      "retrieved.mzseal",
+    ]);
+    assert.equal(existsSync(restoredPath + "-wal"), false);
+    assert.equal(existsSync(restoredPath + "-shm"), false);
+
+    const recovered = new DatabaseSync(restoredPath, { readOnly: true });
+    try {
+      assert.equal(
+        recovered.prepare("PRAGMA integrity_check").get()?.integrity_check,
+        "ok",
+      );
+      assert.equal(
+        recovered.prepare("PRAGMA foreign_key_check").all().length,
+        0,
+      );
+      assert.equal(
+        recovered.prepare("SELECT COUNT(*) AS count FROM users").get()?.count,
+        1,
+      );
+      assert.equal(
+        recovered.prepare("SELECT COUNT(*) AS count FROM sessions").get()
+          ?.count,
+        0,
+      );
+      assert.equal(
+        recovered.prepare("SELECT COUNT(*) AS count FROM projects").get()
+          ?.count,
+        1,
+      );
+      assert.equal(
+        recovered.prepare("SELECT COUNT(*) AS count FROM memberships").get()
+          ?.count,
+        1,
+      );
+      const organizationName = recovered
+        .prepare("SELECT name FROM organizations WHERE id=?")
+        .get("fictional-org")?.name;
+      assert.equal(organizationName, "Fictional Organization");
+    } finally {
+      recovered.close();
+    }
+    // Demonstrate a real authorized local HTTP journey using only fictional
+    // data and the restored copy; do not expose or modify an existing host.
+    const config: Config = {
+      database: restoredPath,
+      origin: "http://localhost",
+      organization: "fictional-org",
+    };
+    const app = application(config);
+    try {
+      app.server.listen(0, "127.0.0.1");
+      await once(app.server, "listening");
+      const address = app.server.address();
+      assert(address && typeof address !== "string");
+      config.origin = "http://localhost:" + address.port;
+      const base = "http://127.0.0.1:" + address.port;
+      const login = await fetch(base + "/api/login", {
+        method: "POST",
+        headers: {
+          Origin: config.origin,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "sealed-backup@example.test",
+          password: "Fictional-secret-only-password-2026",
+        }),
+      });
+      assert.equal(login.status, 200);
+      const session = login.headers.get("set-cookie")?.split(";")[0];
+      assert(session);
+      const response = await fetch(base + "/api/projects", {
+        headers: { Cookie: session },
+      });
+      assert.equal(response.status, 200);
+      const projects = await response.json();
+      assert.equal(projects.length, 1);
+      assert.equal(projects[0].id, "synthetic-recovered-project");
+      assert.equal(projects[0].role, "owner");
+    } finally {
+      await new Promise<void>((done) => app.server.close(() => done()));
+      app.s.close();
+    }
+    assert.equal(hash(f.snapshot), snapshotHash);
+    assert.equal(
+      f.store.get("SELECT COUNT(*) AS count FROM sessions")!.count,
+      sourceSessions,
+    );
+  } finally {
+    f.dispose();
+  }
+});
+
+test("V0.24 offline restore rejects bad keys, corruption, existing targets and sidecars", () => {
+  const f = fixture();
+  try {
+    const sealed = run("scripts/sealed-backup.ts", [
+      "seal",
+      f.snapshot,
+      f.archive,
+      f.key,
+    ]);
+    assert.equal(sealed.status, 0, sealed.stderr);
+    const sourceHash = hash(f.archive);
+    const target = join(f.recoveryDir, "restored.sqlite");
+
+    const wrongKey = run("scripts/sealed-backup.ts", [
+      "restore",
+      f.archive,
+      f.wrongKey,
+      target,
+    ]);
+    assert.notEqual(wrongKey.status, 0);
+    assert.equal(existsSync(target), false);
+    assert.deepEqual(readdirSync(f.recoveryDir), []);
+
+    const corrupt = join(f.archiveDir, "corrupted.mzseal");
+    const altered = readFileSync(f.archive);
+    altered[Math.floor(altered.length / 2)]! ^= 1;
+    writeFileSync(corrupt, altered, { mode: 0o600 });
+    const tampered = run("scripts/sealed-backup.ts", [
+      "restore",
+      corrupt,
+      f.key,
+      target,
+    ]);
+    assert.notEqual(tampered.status, 0);
+    assert.equal(existsSync(target), false);
+    assert.deepEqual(readdirSync(f.recoveryDir), []);
+
+    writeFileSync(target, "existing protected destination", { mode: 0o600 });
+    const existingHash = hash(target);
+    const existing = run("scripts/sealed-backup.ts", [
+      "restore",
+      f.archive,
+      f.key,
+      target,
+    ]);
+    assert.notEqual(existing.status, 0);
+    assert.equal(hash(target), existingHash);
+    assert.deepEqual(readdirSync(f.recoveryDir), ["restored.sqlite"]);
+    rmSync(target);
+
+    const unreachable = join(f.root, "must-not-create.sqlite");
+    symlinkSync(unreachable, target);
+    const linked = run("scripts/sealed-backup.ts", [
+      "restore",
+      f.archive,
+      f.key,
+      target,
+    ]);
+    assert.notEqual(linked.status, 0);
+    assert.equal(existsSync(unreachable), false);
+    assert(lstatSync(target).isSymbolicLink());
+    assert.deepEqual(readdirSync(f.recoveryDir), ["restored.sqlite"]);
+    rmSync(target);
+
+    writeFileSync(target + "-wal", "preexisting sidecar", { mode: 0o600 });
+    const sidecar = run("scripts/sealed-backup.ts", [
+      "restore",
+      f.archive,
+      f.key,
+      target,
+    ]);
+    assert.notEqual(sidecar.status, 0);
+    assert.equal(existsSync(target), false);
+    assert.equal(readFileSync(target + "-wal", "utf8"), "preexisting sidecar");
+    assert.deepEqual(readdirSync(f.recoveryDir), ["restored.sqlite-wal"]);
+    rmSync(target + "-wal");
+
+    const sidecarSymlink = target + "-wal";
+    const sidecarTarget = join(f.root, "sidecar-must-not-be-created");
+    symlinkSync(sidecarTarget, sidecarSymlink);
+    const danglingSidecar = run("scripts/sealed-backup.ts", [
+      "restore",
+      f.archive,
+      f.key,
+      target,
+    ]);
+    assert.notEqual(danglingSidecar.status, 0);
+    assert.equal(existsSync(target), false);
+    assert.equal(existsSync(sidecarTarget), false);
+    assert(lstatSync(sidecarSymlink).isSymbolicLink());
+    rmSync(sidecarSymlink);
+    assert.deepEqual(readdirSync(f.recoveryDir), []);
+
+    // An operator cannot accidentally publish decrypted data under a
+    // world-readable recovery parent or a nonexistent directory.
+    chmodSync(f.recoveryDir, 0o755);
+    const exposed = run("scripts/sealed-backup.ts", [
+      "restore",
+      f.archive,
+      f.key,
+      target,
+    ]);
+    assert.notEqual(exposed.status, 0);
+    assert.equal(existsSync(target), false);
+    assert.deepEqual(readdirSync(f.recoveryDir), []);
+    chmodSync(f.recoveryDir, 0o700);
+
+    const absent = run("scripts/sealed-backup.ts", [
+      "restore",
+      f.archive,
+      f.key,
+      join(f.root, "missing-directory", "restored.sqlite"),
+    ]);
+    assert.notEqual(absent.status, 0);
+    assert.equal(existsSync(join(f.root, "missing-directory")), false);
+    assert.equal(hash(f.archive), sourceHash);
   } finally {
     f.dispose();
   }

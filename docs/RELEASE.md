@@ -36,6 +36,10 @@ The destination must not already exist, including an existing dangling symlink. 
 
 The [sealed backup operator procedure](SEALED-BACKUPS.md) adds AES-256-GCM authenticated encryption **after** the existing validated plaintext SQLite backup, with a separate owner-private 32-byte key file, exclusive archive publication, and an isolated authenticated verification/restore drill. Neither an encrypted file on the same host nor a passing local verification receipt is evidence of an independent off-host backup or usable recovery-key custody. The source plaintext backup remains after sealing, and abrupt interruption can leave transient plaintext in the encrypted recovery filesystem. No key service, off-host transport, retention, or production restore is activated.
 
+## V0.24 optional isolated recovery copy
+
+The [sealed backup recovery CLI](SEALED-BACKUPS.md) now supports `npm run backup:sealed -- restore <retrieved-archive.mzseal> <separate-private-key> <new-offline.sqlite>`. It authenticates the encrypted archive, validates the exact release's migrations and SQLite integrity, invalidates restored sessions, and exclusively publishes a new plaintext **offline-only** SQLite file into an existing 0700 private directory. It will not overwrite any existing destination. This is intended for an authorized encrypted, restricted recovery volume; a local CI copy between independent temporary directories is **not evidence of independent off-host storage**. The command does not replace an active database, expose a restored service, reconcile access revocations or prove recovery objectives. Apply any post-snapshot membership revocations and obtain separate authorization before serving a recovered installation.
+
 ## Isolated offline recovery rehearsal
 
 After making a snapshot through the online backup command, perform an operator-only recovery rehearsal in an **approved encrypted private directory**. This does not expose the snapshot or restore any production database.
