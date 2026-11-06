@@ -291,6 +291,19 @@ test("V0.19 sealing refuses overwrites, symlinks, weak key permissions and expos
     );
     assert.equal(existsSync(join(f.archiveDir, "exposed.mzseal")), false);
     assert.equal(readdirSync(f.recoveryDir).length, 0);
+
+    chmodSync(f.backupDir, 0o700);
+    const danglingWal = f.snapshot + "-wal";
+    symlinkSync(join(f.root, "absent-wal-target"), danglingWal);
+    const unsafe = run("scripts/sealed-backup.ts", [
+      "seal",
+      f.snapshot,
+      join(f.archiveDir, "sidecar-unsafe.mzseal"),
+      f.key,
+    ]);
+    assert.notEqual(unsafe.status, 0);
+    assert(lstatSync(danglingWal).isSymbolicLink());
+    assert.equal(existsSync(join(f.archiveDir, "sidecar-unsafe.mzseal")), false);
   } finally {
     f.dispose();
   }
