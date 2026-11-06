@@ -29,7 +29,7 @@ The optional operator CLI can authenticate/encrypt a verified detached SQLite sn
 
 ## Readiness probe boundary
 
-The unauthenticated `GET /api/ready` is a minimal operational readiness indicator. It checks the configured organization, migration/checksum correspondence and representative essential-table reads without exposing SQL errors, data or internal model details. It returns 503 if those reads fail. It cannot guarantee disk writeability, transaction success, restored permissions, externally verified release identity or business-level health. `GET /api/health` deliberately remains a lightweight process-liveness response. Operators must not mistake either for independent security certification.
+The unauthenticated `GET /api/ready` is a minimal operational readiness indicator. It checks the configured organization, migration/checksum correspondence and representative account, project authorization, invitation, record, and rate-limit table reads without exposing SQL errors, data or internal model details. It returns 503 if those reads fail. It cannot guarantee disk writeability, transaction success, restored permissions, externally verified release identity or business-level health. `GET /api/health` deliberately remains a lightweight process-liveness response. Operators must not mistake either for independent security certification.
 
 ## Limits that still govern release
 
