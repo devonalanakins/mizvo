@@ -68,10 +68,14 @@ async function settledApplication(p) {
   // Otherwise WebKit can reject the departing /api/home read as an unhandled
   // page error. Never suppress or exclude browser errors from the final gate.
   if (p.url().startsWith("http")) {
-    await p.waitForFunction(
-      () =>
-        document.querySelector("#app")?.getAttribute("aria-busy") !== "true",
-    );
+    await p.waitForFunction(() => {
+      const root = document.querySelector("#app");
+      return (
+        root &&
+        root.getAttribute("aria-busy") !== "true" &&
+        Number(root.getAttribute("data-pending-api") ?? "0") === 0
+      );
+    });
   }
   await p.waitForLoadState("networkidle");
 }
@@ -223,6 +227,31 @@ try {
     .getByRole("heading", { name: "Your inquiry is recorded." })
     .waitFor();
   await signIn(page, founder.email);
+  // A hard navigation must wait for a deliberately delayed real /api/home
+  // response, rather than aborting it and hiding a WebKit page error.
+  await settledApplication(page);
+  let releaseHome;
+  const heldHome = new Promise((resolve) => {
+    releaseHome = resolve;
+  });
+  await page.route("**/api/home", async (route) => {
+    await heldHome;
+    await route.continue();
+  });
+  const homeRequested = page.waitForRequest("**/api/home");
+  const homeReload = settledReload(page);
+  try {
+    await homeRequested;
+    await page.waitForFunction(
+      () => Number(document.querySelector("#app")?.dataset.pendingApi) > 0,
+    );
+    assert.equal(await page.locator("#app").getAttribute("aria-busy"), "true");
+  } finally {
+    releaseHome();
+    await homeReload;
+    await page.unroute("**/api/home");
+  }
+  assert.equal(await page.locator("#app").getAttribute("data-pending-api"), "0");
   await page
     .getByRole("region", { name: "Suggested next action" })
     .getByRole("heading", { name: "Give your next project a home." })
