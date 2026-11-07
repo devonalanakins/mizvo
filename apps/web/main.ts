@@ -69,20 +69,29 @@ function toast(message: string) {
     n.textContent = "";
   }, 6000);
 }
+// Report pending application requests without exposing URLs or response data.
+ // Navigation readiness must include authenticated loading before aria-busy
+ // becomes visible; otherwise WebKit can abort an in-flight /api/home request.
+let pendingApi = 0;
 async function api(path: string, method = "GET", body?: unknown): Promise<any> {
-  const response = await fetch("/api" + path, {
-    method,
-    credentials: "same-origin",
-    headers: {
-      ...(body ? { "Content-Type": "application/json" } : {}),
-      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  const value = await response.json();
-  if (!response.ok)
-    throw new Error(value.error ?? `Request failed (${response.status}).`);
-  return value;
+  root.dataset.pendingApi = String(++pendingApi);
+  try {
+    const response = await fetch("/api" + path, {
+      method,
+      credentials: "same-origin",
+      headers: {
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const value = await response.json();
+    if (!response.ok)
+      throw new Error(value.error ?? `Request failed (${response.status}).`);
+    return value;
+  } finally {
+    root.dataset.pendingApi = String(--pendingApi);
+  }
 }
 function parseRoute() {
   const u = new URL(location.href),
@@ -760,6 +769,7 @@ async function render() {
     route.surface === "site"
       ? "Mizvo — Make the improbable useful."
       : `Mizvo / ${route.surface === "space" ? "Client Space" : "Studio"}`;
+  root.setAttribute("aria-busy", "true");
   try {
     if (route.surface === "site") {
       root.innerHTML = discover();
@@ -779,7 +789,6 @@ async function render() {
       await navigate("/studio");
       return;
     }
-    root.setAttribute("aria-busy", "true");
     projects = await api(
       route.surface === "space" ? "/space/projects" : "/projects",
     );
