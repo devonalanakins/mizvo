@@ -251,7 +251,10 @@ try {
     await homeReload;
     await page.unroute("**/api/home");
   }
-  assert.equal(await page.locator("#app").getAttribute("data-pending-api"), "0");
+  assert.equal(
+    await page.locator("#app").getAttribute("data-pending-api"),
+    "0",
+  );
   await page
     .getByRole("region", { name: "Suggested next action" })
     .getByRole("heading", { name: "Give your next project a home." })
