@@ -16,7 +16,7 @@ The application's original `127.0.0.1` default binding **remains unchanged**. A 
 
 - Host port is constrained to `127.0.0.1:4173` only. A separately reviewed reverse proxy and approved TLS origin would be necessary for browser access.
 - Container uses UID 1000, `read_only: true`, all Linux capabilities dropped, `no-new-privileges`, PID and memory/CPU limits, and a restricted ephemeral `/tmp`.
-- A Docker named volume persists SQLite across container replacement. The volume requires external encryption, access control, backups and off-host retention before real customer use.
+- A Docker named volume persists SQLite across container replacement. Production startup now requires the pre-existing owner-private 0700 SQLite directory and rejects symlinked parent/file paths, so missing directory creation cannot silently replace an intended volume. The image prepares its directory, but **a pre-existing directory inside an image is not proof a host volume mounted successfully**; independently inspect container mounts and data persistence, then provide external encryption, access controls, backups and off-host retention before real use.
 - An explicit HTTPS `MIZVO_ORIGIN` must be supplied: missing or HTTP origins fail closed in production.
 - A single installation represents one Mizvo organization; the sample is **not** a verified multi-tenant hosting control. Never mix distinct customers in one database.
 
