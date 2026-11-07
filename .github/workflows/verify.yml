@@ -1,0 +1,71 @@
+name: Verify platform
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:distribution
+      - run: npm run artifact:create
+      - run: npm run artifact:verify
+      - run: npm run test:installation
+      - run: npm run test:staging
+      - run: npm run test:tls
+      - run: npm run test:container
+      - run: npm audit --omit=dev --audit-level=high
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: mizvo-verification
+          path: docs/evidence/
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: success()
+        with:
+          name: mizvo-candidate-distribution
+          path: |
+            dist/
+            build-proof.json
+          if-no-files-found: error
+          retention-days: 14
+
+  browser:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # The matching, version-pinned Playwright image bundles both browsers and
+    # system dependencies. Avoid apt mirror stalls in the core release gate.
+    container:
+      image: mcr.microsoft.com/playwright:v1.57.0-noble
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:browser
+      - run: MIZVO_BROWSER=webkit npm run test:browser
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: mizvo-browser-verification
+          path: docs/evidence/
+          if-no-files-found: warn
+          retention-days: 14

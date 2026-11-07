@@ -1,0 +1,26 @@
+# Deliberately bounded build context. Exclude credentials, database and CI artifacts.
+**
+!package.json
+!package-lock.json
+!tsconfig.json
+!LICENSE
+!apps/
+!apps/**
+!packages/
+!packages/**
+!scripts/
+!scripts/**
+**/.env
+**/.env.*
+**/*.sqlite
+**/*.sqlite-*
+**/*.db
+**/*.pem
+**/*.key
+**/*.p12
+**/*secret*
+**/node_modules/
+**/dist/
+**/var/
+**/docs/evidence/
+**/.git/

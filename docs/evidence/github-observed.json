@@ -1,0 +1,61 @@
+{
+  "repository": "devonalanakins/mizvo",
+  "fetched_at": "2026-11-05T03:18:51.721Z",
+  "branches": [
+    {
+      "name": "build/secure-platform-v0-5",
+      "sha": "64da1f1c4681243df2e747961e2510df16a0c1a9",
+      "protected": false
+    },
+    {
+      "name": "design/solo-online-studio-v0-4",
+      "sha": "8a3a6fa2eeabbb971044e7ad77f8c96439d9d670",
+      "protected": false
+    },
+    {
+      "name": "main",
+      "sha": "b247d4e1c78af0057992ec2be9f68c13b755aaca",
+      "protected": false
+    }
+  ],
+  "commits": [
+    {
+      "sha": "b247d4e1c78af0057992ec2be9f68c13b755aaca",
+      "message": "Initial commit",
+      "url": "https://github.com/devonalanakins/mizvo/commit/b247d4e1c78af0057992ec2be9f68c13b755aaca"
+    }
+  ],
+  "pulls": [
+    {
+      "number": 2,
+      "title": "feat: secure Mizvo platform and verified release-source evidence (AGPL-3.0)",
+      "url": "https://github.com/devonalanakins/mizvo/pull/2",
+      "head": "64da1f1c4681243df2e747961e2510df16a0c1a9",
+      "draft": true
+    },
+    {
+      "number": 1,
+      "title": "docs: synchronize Mizvo solo-first integrated Studio direction",
+      "url": "https://github.com/devonalanakins/mizvo/pull/1",
+      "head": "8a3a6fa2eeabbb971044e7ad77f8c96439d9d670",
+      "draft": true
+    }
+  ],
+  "source": {
+    "path": "README.md",
+    "sha": "6c3c3bdace67bc2a095024ee3ceafe580df6beb1",
+    "type": "file"
+  },
+  "check_runs": [],
+  "comparison": {
+    "status": "ahead",
+    "total_commits": 4,
+    "files": [
+      "README.md",
+      "docs/locked-uiux-main-build-v0.5.md",
+      "docs/online-studio.md",
+      "docs/studio-visual-direction-v0.4.md"
+    ]
+  },
+  "limitations": "Read-only public repository integration; no private GitHub App credentials, write, runner execution, deployment or CI pass is claimed."
+}
