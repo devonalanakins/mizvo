@@ -98,7 +98,6 @@ test("direct production application accepts a canonical HTTPS origin and absolut
   }
 });
 
-
 test("production storage preflight rejects missing, exposed and symlinked SQLite paths", () => {
   const root = mkdtempSync(join(tmpdir(), "mizvo-storage-preflight-"));
   try {
@@ -169,6 +168,11 @@ test("standalone startup rejects unsafe production configuration before creating
     };
     delete valid.MIZVO_EXPECTED_SERVER_SHA256;
     const cases = [
+      {
+        name: "missing persistent storage directory",
+        overrides: {},
+        error: /Production database directory must exist before startup/,
+      },
       {
         name: "missing production database setting",
         overrides: { MIZVO_DATABASE: undefined },
