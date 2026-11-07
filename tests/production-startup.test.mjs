@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,6 +81,7 @@ test("direct production application accepts a canonical HTTPS origin and absolut
   const root = mkdtempSync(join(tmpdir(), "mizvo-valid-config-"));
   try {
     const database = join(root, "private", "database.sqlite");
+    mkdirSync(join(root, "private"), { mode: 0o700 });
     const app = application({
       database,
       origin: "https://stage.example.invalid",
@@ -84,6 +92,63 @@ test("direct production application accepts a canonical HTTPS origin and absolut
       assert.equal(existsSync(database), true);
     } finally {
       app.s.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test("production storage preflight rejects missing, exposed and symlinked SQLite paths", () => {
+  const root = mkdtempSync(join(tmpdir(), "mizvo-storage-preflight-"));
+  try {
+    const privateDir = join(root, "private");
+    const exposedDir = join(root, "exposed");
+    const linkedDir = join(root, "linked");
+    mkdirSync(privateDir, { mode: 0o700 });
+    mkdirSync(exposedDir, { mode: 0o755 });
+    chmodSync(exposedDir, 0o755);
+    symlinkSync(privateDir, linkedDir);
+
+    const target = join(privateDir, "not-created.sqlite");
+    const linkedFile = join(privateDir, "linked.sqlite");
+    symlinkSync(target, linkedFile);
+    const cases = [
+      {
+        name: "missing mounted database directory",
+        path: join(root, "missing", "database.sqlite"),
+        error: /Production database directory must exist before startup/,
+      },
+      {
+        name: "exposed database directory",
+        path: join(exposedDir, "database.sqlite"),
+        error: /Production database directory must be private and canonical/,
+      },
+      {
+        name: "symlinked database directory",
+        path: join(linkedDir, "database.sqlite"),
+        error: /Production database directory must be private and canonical/,
+      },
+      {
+        name: "dangling database symlink",
+        path: linkedFile,
+        error: /Production database path must be a regular file/,
+      },
+    ];
+    for (const scenario of cases) {
+      assert.throws(
+        () =>
+          application({
+            database: scenario.path,
+            origin: "https://stage.example.invalid",
+            organization: "fictional",
+            production: true,
+          }),
+        scenario.error,
+        scenario.name,
+      );
+      assert.equal(existsSync(target), false, scenario.name);
+      assert.equal(existsSync(join(exposedDir, "database.sqlite")), false);
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
