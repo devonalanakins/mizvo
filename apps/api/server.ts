@@ -4,9 +4,9 @@ import {
   type ServerResponse,
 } from "node:http";
 import { readFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, lstatSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { resolve, extname, isAbsolute } from "node:path";
+import { resolve, extname, isAbsolute, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { Store, type Row } from "../../packages/storage/database.ts";
 import {
@@ -41,6 +41,37 @@ import {
 const serverFileSha256 = createHash("sha256")
   .update(readFileSync(fileURLToPath(import.meta.url)))
   .digest("hex");
+
+// Production must never silently create a new database directory when its
+// intended persistent mount is absent. This preflight is intentionally before
+// Store(), whose local-development constructor creates missing directories.
+function verifyProductionStorage(database: string) {
+  const directory = dirname(database);
+  let parent;
+  try {
+    parent = lstatSync(directory);
+  } catch {
+    throw new Error("Production database directory must exist before startup.");
+  }
+  if (
+    !parent.isDirectory() ||
+    (parent.mode & 0o077) !== 0 ||
+    realpathSync(directory) !== resolve(directory)
+  )
+    throw new Error(
+      "Production database directory must be private and canonical.",
+    );
+
+  // Reject regular or dangling symlinks and special files without ever
+  // following them. An absent database file is valid on an approved volume.
+  try {
+    const target = lstatSync(database);
+    if (!target.isFile())
+      throw new Error("Production database path must be a regular file.");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
 
 export interface Config {
   database: string;
@@ -78,6 +109,7 @@ export function application(
       // A malformed URL is not a production origin.
     }
     assert(exactOrigin, 500, "Production requires an exact HTTPS origin.");
+    verifyProductionStorage(config.database);
   }
   const s = new Store(config.database),
     d = new Domain(s, config.organization),
