@@ -71,7 +71,7 @@ function toast(message: string) {
 }
 // Report pending application requests without exposing URLs or response data.
 // Navigation readiness must include authenticated loading before aria-busy
- // becomes visible; otherwise WebKit can abort an in-flight /api/home request.
+// becomes visible; otherwise WebKit can abort an in-flight /api/home request.
 let pendingApi = 0;
 async function api(path: string, method = "GET", body?: unknown): Promise<any> {
   root.dataset.pendingApi = String(++pendingApi);
